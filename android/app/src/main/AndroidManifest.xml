@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Release builds need explicit INTERNET permission (debug/profile manifests
+         grant it automatically, but LLM/translation HTTP calls must also work in
+         release APKs). -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="agent_book_reader"
         android:name="${applicationName}"

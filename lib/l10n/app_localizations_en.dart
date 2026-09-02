@@ -111,6 +111,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get export => 'Export';
 
   @override
+  String get chapters => 'Chapters';
+
+  @override
   String get writeBack => 'Write to original file (.bak)';
 
   @override

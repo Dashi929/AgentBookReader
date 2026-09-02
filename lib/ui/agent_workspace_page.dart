@@ -89,6 +89,8 @@ class _AgentWorkspacePageState extends ConsumerState<AgentWorkspacePage> {
 
   Future<WorkspaceDoc?> _loadDoc(BookEntry b) async {
     try {
+      // pdf 不走文本管道（渲染层独立），工作台暂不加载
+      if (b.extension == 'pdf') return null;
       final bytes = await XFile(b.path).readAsBytes();
       final ext = b.extension;
       final (format, content) = ext == 'docx'

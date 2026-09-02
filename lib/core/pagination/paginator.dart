@@ -11,6 +11,7 @@ class ReaderPageConfig {
     this.fontSize = 18,
     this.lineHeight = 1.6,
     this.paragraphSpacing = 10,
+    this.imageLineHeight,
   });
 
   final double width;
@@ -18,6 +19,10 @@ class ReaderPageConfig {
   final double fontSize;
   final double lineHeight;
   final double paragraphSpacing;
+
+  /// 图片段落解析器：段落文本匹配图片占位符时返回该行显示高度（含留白），
+  /// 返回 null 按普通文本排版。用于 docx/epub 内嵌图片的整行渲染。
+  final double? Function(String paragraphText)? imageLineHeight;
 }
 
 /// 页内一行：段落序号 + 该行的富文本切片。
@@ -53,6 +58,21 @@ class Paginator {
       for (final p in section.paragraphs) {
         final text = p.plainText;
         if (text.trim().isEmpty) continue;
+        final imageHeight = cfg.imageLineHeight?.call(text);
+        if (imageHeight != null) {
+          // 图片段：整段一行，高度由解析器给定（保持 CharRange/偏移不变式，
+          // 行 segments 仍为占位符文本）。
+          if (current.isNotEmpty && p.index != lastParagraph) {
+            used += cfg.paragraphSpacing;
+          }
+          if (used + imageHeight > cfg.height && current.isNotEmpty) {
+            closePage();
+          }
+          current.add(PageLine(p.index, p.segments, imageHeight));
+          used += imageHeight;
+          lastParagraph = p.index;
+          continue;
+        }
         final spans = TextSpan(
           children: p.segments
               .map((s) => TextSpan(

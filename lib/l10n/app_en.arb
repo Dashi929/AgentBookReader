@@ -35,6 +35,7 @@
   "@unTranslated": { "placeholders": { "title": { "type": "String" } } },
   "annotations": "Annotations",
   "export": "Export",
+  "chapters": "Chapters",
   "writeBack": "Write to original file (.bak)",
   "originalFileUpdated": "Original file backed up and updated"
 }

@@ -25,6 +25,7 @@ dependencies:
   xml: ^7.0.1
   http: ^1.6.0
   flutter_secure_storage: ^11.0.0
+  pdfrx: ^2.5.0
 
 dev_dependencies:
   flutter_test:

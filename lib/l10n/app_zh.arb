@@ -33,5 +33,6 @@
   "annotations": "批注",
   "export": "导出",
   "writeBack": "写入原文件(.bak)",
+  "chapters": "章节",
   "originalFileUpdated": "原文件已备份并更新"
 }

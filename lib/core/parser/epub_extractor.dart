@@ -1,7 +1,10 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:xml/xml.dart';
+
+import '../model/extracted_image.dart';
 
 /// .epub 提取：ZIP → META-INF/container.xml → OPF → spine 顺序 XHTML
 /// → 每个文档的标题/段落转 Markdown（h1..h6 → #、strong/b → **）。
@@ -60,6 +63,12 @@ class EpubExtractor {
 
   /// 提取为 Markdown。
   static String extractAsMarkdown(List<int> bytes) {
+    return extractAsMarkdownWithImages(bytes).markdown;
+  }
+
+  /// 同 [extractAsMarkdown]，同时提取内嵌图片（<img src>），
+  /// 在图片位置插入整行占位段 `[[IMG:imgN]]`。
+  static ExtractionWithImages extractAsMarkdownWithImages(List<int> bytes) {
     final archive = ZipDecoder().decodeBytes(bytes);
     final opfPath = _opfPath(archive);
     if (opfPath == null) {
@@ -67,6 +76,7 @@ class EpubExtractor {
     }
     final hrefs = _spineHrefs(archive, opfPath);
     final out = <String>[];
+    final images = <ExtractedImage>[];
 
     for (final href in hrefs) {
       final file = _find(archive, href);
@@ -94,6 +104,11 @@ class EpubExtractor {
       final body = doc.findAllElements('body').firstOrNull;
       if (body == null) continue;
 
+      // 图片 src 相对路径基于当前 xhtml 所在目录解析
+      final dir = href.contains('/')
+          ? href.substring(0, href.lastIndexOf('/') + 1)
+          : '';
+
       for (final el in body.descendantElements) {
         final name = el.name.local.toLowerCase();
         if (name == 'p') {
@@ -105,10 +120,42 @@ class EpubExtractor {
           if (text.isNotEmpty) {
             out.add('${'#' * level} $text');
           }
+        } else if (name == 'image' || name == 'img') {
+          final src = el.getAttribute('src') ??
+              el.getAttribute('xlink:href') ??
+              el.getAttribute('href');
+          if (src == null || src.isEmpty) continue;
+          if (src.startsWith('http')) continue;
+          final mediaPath = _normalizePath('$dir$src');
+          final mediaFile = _find(archive, mediaPath);
+          if (mediaFile == null) continue;
+          final id = 'img${images.length + 1}';
+          images.add(ExtractedImage(
+              id: id,
+              bytes: Uint8List.fromList(mediaFile.content),
+              ext: mediaPath.split('.').last.toLowerCase()));
+          out.add('[[IMG:$id]]');
         }
       }
     }
-    return out.join('\n\n');
+    return ExtractionWithImages(
+        markdown: out.where((t) => t.isNotEmpty).join('\n\n'),
+        images: images);
+  }
+
+  /// 归一化 zip 内相对路径（处理 ../ 与 ./，统一 / 分隔）。
+  static String _normalizePath(String path) {
+    final parts = path.replaceAll('\\', '/').split('/');
+    final stack = <String>[];
+    for (final part in parts) {
+      if (part.isEmpty || part == '.') continue;
+      if (part == '..') {
+        if (stack.isNotEmpty) stack.removeLast();
+        continue;
+      }
+      stack.add(part);
+    }
+    return stack.join('/');
   }
 
   /// 段内行内标记：strong/b → **粗体**，其余文本原样。

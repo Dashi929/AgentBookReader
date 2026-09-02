@@ -272,6 +272,12 @@ abstract class AppLocalizations {
   /// **'Export'**
   String get export;
 
+  /// No description provided for @chapters.
+  ///
+  /// In en, this message translates to:
+  /// **'Chapters'**
+  String get chapters;
+
   /// No description provided for @writeBack.
   ///
   /// In en, this message translates to:

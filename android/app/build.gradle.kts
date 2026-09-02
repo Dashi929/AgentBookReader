@@ -6,7 +6,9 @@ plugins {
 
 android {
     namespace = "com.openleaf.agent_book_reader"
-    compileSdk = flutter.compileSdkVersion
+    // flutter_secure_storage v11 requires SDK 37; pinned explicitly so the
+    // Flutter tool's auto-bump warning does not depend on plugin discovery.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

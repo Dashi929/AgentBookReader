@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:xml/xml.dart';
 
 import '../model/char_range.dart';
+import '../model/extracted_image.dart';
 
 /// .docx 文本提取：解包 ZIP → `word/document.xml` →
 /// `w:p` 段落 / `w:t` 文本 / `w:b` 粗体 / 标题样式 → 轻量段落结构。
@@ -124,20 +126,90 @@ class DocxExtractor {
   /// 提取为 Markdown（标题段落转 `#`，粗体转 `**`），
   /// 交给 MdParser 解析即可获得按标题切分的 Section。
   static String extractAsMarkdown(List<int> bytes) {
-    final paras = extract(bytes);
+    return extractAsMarkdownWithImages(bytes).markdown;
+  }
+
+  /// 同 [extractAsMarkdown]，同时提取内嵌图片（w:drawing/a:blip → media），
+  /// 在图片位置插入整行占位段 `[[IMG:imgN]]`。
+  static ExtractionWithImages extractAsMarkdownWithImages(List<int> bytes) {
+    final archive = ZipDecoder().decodeBytes(bytes);
+    final mediaRels = _mediaRels(archive);
+    final images = <ExtractedImage>[];
     final out = <String>[];
-    for (final p in paras) {
-      final text = p.segments.map((s) => s.text).join().trim();
-      if (text.isEmpty) continue;
-      if (p.heading) {
-        out.add('# $text');
-      } else {
-        final rendered = p.segments
-            .map((s) => s.style == SegmentStyle.bold ? '**${s.text}**' : s.text)
-            .join();
-        out.add(rendered.trim());
+
+    final docXml = _findEntry(archive, 'word/document.xml');
+    if (docXml != null) {
+      final doc =
+          XmlDocument.parse(utf8.decode(docXml.content, allowMalformed: true));
+      final body = doc.findAllElements('w:body').firstOrNull;
+      if (body != null) {
+        for (final node in body.childElements) {
+          final local = node.name.local;
+          if (local == 'p') {
+            final para = _extractParagraph(node);
+            if (para != null) {
+              final text = para.segments.map((s) => s.text).join().trim();
+              if (text.isNotEmpty) {
+                if (para.heading) {
+                  out.add('# $text');
+                } else {
+                  out.add(para.segments
+                      .map((s) => s.style == SegmentStyle.bold
+                          ? '**${s.text}**'
+                          : s.text)
+                      .join()
+                      .trim());
+                }
+              }
+            }
+            // 内嵌图片：w:drawing/a:blip[r:embed] → rels → media → 占位段
+            for (final blip in node.findAllElements('a:blip')) {
+              final rid =
+                  blip.getAttribute('r:embed') ?? blip.getAttribute('embed');
+              final mediaPath = rid == null ? null : mediaRels[rid];
+              if (mediaPath == null) continue;
+              final mediaFile = _findEntry(archive, mediaPath);
+              if (mediaFile == null) continue;
+              final id = 'img${images.length + 1}';
+              images.add(ExtractedImage(
+                  id: id,
+                  bytes: Uint8List.fromList(mediaFile.content),
+                  ext: mediaPath.split('.').last.toLowerCase()));
+              out.add('[[IMG:$id]]');
+            }
+          } else if (local == 'tbl') {
+            final text = _extractTable(node);
+            if (text.isNotEmpty) out.add(text);
+          }
+        }
       }
     }
-    return out.join('\n\n');
+    return ExtractionWithImages(
+        markdown: out.where((t) => t.isNotEmpty).join('\n\n'),
+        images: images);
+  }
+
+  /// 解析 word/_rels/document.xml.rels：rId → media 路径（归一化到包根）。
+  static Map<String, String> _mediaRels(Archive archive) {
+    final relsFile = _findEntry(archive, 'word/_rels/document.xml.rels');
+    if (relsFile == null) return {};
+    try {
+      final doc = XmlDocument.parse(
+          utf8.decode(relsFile.content, allowMalformed: true));
+      final map = <String, String>{};
+      for (final rel in doc.findAllElements('Relationship')) {
+        final id = rel.getAttribute('Id');
+        final target = rel.getAttribute('Target');
+        if (id != null &&
+            target != null &&
+            target.toLowerCase().contains('media')) {
+          map[id] =
+              target.startsWith('/') ? target.substring(1) : 'word/$target';
+        }
+      }
+      return map;
+    } catch (_) {
+      return {};
+    }
   }
 }

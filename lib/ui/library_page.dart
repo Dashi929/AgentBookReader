@@ -1,11 +1,17 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/io/text_decoder.dart';
+import '../core/model/extracted_image.dart';
 import '../core/parser/docx_extractor.dart';
 import '../core/parser/epub_extractor.dart';
 import '../l10n/app_localizations.dart';
+import 'package:path_provider/path_provider.dart';
 import '../state/app_state.dart';
 import 'agent_settings_screen.dart';
 import 'agent_workspace_page.dart';
@@ -15,13 +21,13 @@ import 'reader_screen.dart';
 class LibraryPage extends ConsumerWidget {
   const LibraryPage({super.key});
 
-  static const _allowedExt = {'txt', 'md', 'json', 'docx', 'epub'};
+  static const _allowedExt = {'txt', 'md', 'json', 'docx', 'epub', 'pdf'};
 
   Future<void> _import(BuildContext context, WidgetRef ref) async {
     final s = AppLocalizations.of(context)!;
     const typeGroup = XTypeGroup(
       label: 'documents',
-      extensions: ['txt', 'md', 'json', 'docx', 'epub'],
+      extensions: ['txt', 'md', 'json', 'docx', 'epub', 'pdf'],
     );
     final files = await openFiles(acceptedTypeGroups: [typeGroup]);
     if (files.isEmpty) return;
@@ -31,19 +37,40 @@ class LibraryPage extends ConsumerWidget {
       final ext = file.name.split('.').last.toLowerCase();
       if (!_allowedExt.contains(ext)) continue;
       try {
-        final bytes = await file.readAsBytes();
-        // docx/epub：提取为 Markdown（标题→#），阅读器按 md 处理
-        final (format, content) = ext == 'docx'
-            ? ('md', DocxExtractor.extractAsMarkdown(bytes))
-            : ext == 'epub'
-                ? ('md', EpubExtractor.extractAsMarkdown(bytes))
-                : (ext, TextDecoder.decode(bytes));
+        final entryId = '${DateTime.now().microsecondsSinceEpoch}_${file.name}';
+        // pdf：不经文本管道，阅读器用 pdfium 渲染页面；
+        // docx/epub：提取为 Markdown（标题→#）+ 内嵌图片占位段
+        String format;
+        String content;
+        var extractedImages = const <ExtractedImage>[];
+        if (ext == 'pdf') {
+          format = 'pdf';
+          content = '';
+        } else if (ext == 'docx') {
+          final r = DocxExtractor.extractAsMarkdownWithImages(
+              await file.readAsBytes());
+          format = 'md';
+          content = r.markdown;
+          extractedImages = r.images;
+        } else if (ext == 'epub') {
+          final r = EpubExtractor.extractAsMarkdownWithImages(
+              await file.readAsBytes());
+          format = 'md';
+          content = r.markdown;
+          extractedImages = r.images;
+        } else {
+          format = ext;
+          content = TextDecoder.decode(await file.readAsBytes());
+        }
         final entry = BookEntry(
-          id: '${DateTime.now().microsecondsSinceEpoch}_${file.name}',
+          id: entryId,
           title: file.name,
           path: file.path,
           extension: ext,
         );
+        if (extractedImages.isNotEmpty) {
+          await _saveImages(entryId, extractedImages);
+        }
         await ref.read(libraryProvider.notifier).add(entry);
         opened.add((
           title: file.name,
@@ -74,6 +101,63 @@ class LibraryPage extends ConsumerWidget {
     }
   }
 
+  /// 内嵌图片落盘：`images/<entryId>/imgN.<ext>` + manifest.json（宽高信息）。
+  static Future<void> _saveImages(
+      String entryId, List<ExtractedImage> images) async {
+    try {
+      final support = await getApplicationSupportDirectory();
+      final imgDir = Directory('${support.path}/images/$entryId');
+      await imgDir.create(recursive: true);
+      final manifest = <String, Map<String, dynamic>>{};
+      for (final img in images) {
+        final f = File('${imgDir.path}/${img.id}.${img.ext}');
+        await f.writeAsBytes(img.bytes);
+        final (w, h) = _imageSize(img.bytes, img.ext);
+        manifest[img.id] = {'file': '${img.id}.${img.ext}', 'w': w, 'h': h};
+      }
+      await File('${imgDir.path}/manifest.json')
+          .writeAsString(jsonEncode(manifest), flush: true);
+    } catch (_) {
+      // 图片保存失败不阻断导入（阅读时仅显示占位文本）
+    }
+  }
+
+ /// 解析图片文件头获取宽高（PNG/JPEG/GIF/BMP）；失败返回 (0,0)。
+ static (int, int) _imageSize(Uint8List bytes, String ext) {
+   try {
+     if (ext == 'png' && bytes.length > 24) {
+       final w = (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
+       final h = (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23];
+       return (w, h);
+     }
+     if (ext == 'gif' && bytes.length > 10) {
+       return (bytes[6] | (bytes[7] << 8), bytes[8] | (bytes[9] << 8));
+     }
+     if (ext == 'bmp' && bytes.length > 26) {
+       final w = bytes[18] | (bytes[19] << 8) | (bytes[20] << 16) | (bytes[21] << 24);
+       final h = bytes[22] | (bytes[23] << 8) | (bytes[24] << 16) | (bytes[25] << 24);
+       return (w, h.abs());
+     }
+     if ((ext == 'jpg' || ext == 'jpeg') && bytes.length > 9) {
+       var i = 2;
+       while (i + 9 < bytes.length) {
+         if (bytes[i] != 0xFF) {
+           i++;
+           continue;
+         }
+         final marker = bytes[i + 1];
+         if (marker >= 0xC0 && marker <= 0xCF && marker != 0xC4 && marker != 0xC8 && marker != 0xCC) {
+           final h = (bytes[i + 5] << 8) | bytes[i + 6];
+           final w = (bytes[i + 7] << 8) | bytes[i + 8];
+           return (w, h);
+         }
+         final len = (bytes[i + 2] << 8) | bytes[i + 3];
+         i += 2 + len;
+       }
+     }
+   } catch (_) {}
+   return (0, 0);
+ }
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = AppLocalizations.of(context)!;
@@ -140,7 +224,8 @@ class LibraryPage extends ConsumerWidget {
                 );
               },
             ),
-      floatingActionButton: FloatingActionButton.extended(
+    
+    floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _import(context, ref),
         icon: const Icon(Icons.upload_file),
         label: Text(s.importFiles),

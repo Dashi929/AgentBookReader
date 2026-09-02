@@ -109,6 +109,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get export => '导出';
 
   @override
+  String get chapters => '章节';
+
+  @override
   String get writeBack => '写入原文件(.bak)';
 
   @override
