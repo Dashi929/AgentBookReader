@@ -49,13 +49,13 @@ class PptxSlideView extends StatelessWidget {
         }
       }
       if (fallback.isNotEmpty) {
-        children.add(Positioned(
-          left: 8,
-          top: 8,
-          child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: fallback),
+        children.add(Positioned.fill(
+          child: Center(
+            child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: fallback),
+          ),
         ));
       }
       Widget canvas = SizedBox(

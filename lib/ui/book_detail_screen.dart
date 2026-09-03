@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_selector/file_selector.dart' show XFile;
@@ -6,8 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfrx/pdfrx.dart';
 
-import '../agent/agent_settings.dart';
-import '../agent/llm_client.dart';
 import '../core/controller/plain_text_document.dart';
 import '../core/model/char_range.dart' show DocFormat;
 import '../core/parser/cbz_extractor.dart';
@@ -37,7 +34,6 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
   String _preview = '';
   String _content = ''; // 非 PDF：已解码全文，供开始阅读复用
   bool _loading = true;
-  bool _completing = false;
   String? _error;
 
   BookEntry? get _entry => ref.read(libraryProvider.notifier).byId(widget.entryId);
@@ -149,62 +145,6 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
     }
   }
 
-  /// AI 补全：让 LLM 从文件名 + 内容开头推断作者与简介，返回 JSON。
-  Future<void> _aiComplete() async {
-    final entry = _entry;
-    if (entry == null || _completing) return;
-    final s = AppLocalizations.of(context)!;
-    final settings = await AgentSettings.instance.read();
-    if (settings.baseUrl.isEmpty || settings.model.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('请先在设置中配置 LLM 接口')));
-      }
-      return;
-    }
-    setState(() => _completing = true);
-    try {
-      final excerpt = _preview.isEmpty ? '' : _preview.substring(0, _preview.length.clamp(0, 600));
-      final client = LlmClient(
-          baseUrl: settings.baseUrl,
-          apiKey: settings.apiKey,
-          model: settings.model);
-      final resp = await client.chat(messages: [
-        LlmMessage.system('你是图书元数据助手。只输出一个 JSON 对象，'
-            '格式：{"author": "作者名，推断不出则为空字符串", '
-            '"synopsis": "50-150字的简介（用与书籍相同的语言）"}，不要输出其他内容。'),
-        LlmMessage.user('文件名：${entry.title}\n\n内容开头：\n$excerpt'),
-      ]);
-      final json = _extractJson(resp.content ?? '');
-      final author = (json['author'] as String?)?.trim() ?? '';
-      final synopsis = (json['synopsis'] as String?)?.trim() ?? '';
-      await ref
-          .read(libraryProvider.notifier)
-          .updateMeta(entry.id, author: author, synopsis: synopsis);
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(s.aiCompleteDone)));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('${s.aiComplete}失败: $e')));
-      }
-    } finally {
-      if (mounted) setState(() => _completing = false);
-    }
-  }
-
-  static Map<String, dynamic> _extractJson(String text) {
-    final m = RegExp(r'\{[\s\S]*\}').firstMatch(text);
-    if (m == null) return {};
-    try {
-      return jsonDecode(m.group(0)!) as Map<String, dynamic>;
-    } catch (_) {
-      return {};
-    }
-  }
-
   void _startReading() {
     final entry = _entry;
     if (entry == null) return;
@@ -299,18 +239,6 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
                             color: entry.synopsis.isEmpty
                                 ? theme.colorScheme.onSurfaceVariant
                                 : null)),
-                    const SizedBox(height: 20),
-                    FilledButton.icon(
-                      onPressed: _completing ? null : _aiComplete,
-                      icon: _completing
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child:
-                                  CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.auto_fix_high_outlined),
-                      label: Text(s.aiComplete),
-                    ),
                     if (_preview.isNotEmpty) ...[
                       const SizedBox(height: 20),
                       _SectionTitle(s.preview),
@@ -346,14 +274,6 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
                       onPressed: _startReading,
                       icon: const Icon(Icons.menu_book_outlined),
                       label: Text(s.startReading),
-                    ),
-                    const SizedBox(height: 8),
-                    OutlinedButton.icon(
-                      onPressed: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                              builder: (_) => const AgentWorkspacePage())),
-                      icon: const Icon(Icons.smart_toy_outlined),
-                      label: Text(s.agentPanel),
                     ),
                     const SizedBox(height: 32),
                   ],

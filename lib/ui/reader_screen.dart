@@ -85,12 +85,16 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   // xlsx/pptx/cbz 专属渲染模式（Office 视觉近似 / 漫画整页）
   List<XlsxSheetData>? _xlsxSheets;
   List<PptSlideData>? _pptxSlides;
-  List<String> _comicPagePaths = const [];
+  List<({String path, int w, int h})> _comicPages = const [];
   List<String> _officePageTexts = const []; // 每页文本（整页翻译用）
+
+  bool _continuous = PrefsService.instance.loadReaderContinuous();
+  List<double> _contOffsets = const [0.0];
+  final ScrollController _continuousController = ScrollController();
 
   bool get _isXlsx => widget.format == 'xlsx' && _xlsxSheets != null;
   bool get _isPptx => widget.format == 'pptx' && _pptxSlides != null;
-  bool get _isComic => widget.format == 'cbz' && _comicPagePaths.isNotEmpty;
+  bool get _isComic => widget.format == 'cbz' && _comicPages.isNotEmpty;
   bool get _officeMode => _isPdf || _isXlsx || _isPptx || _isComic;
   int get _officePageCount => _isPdf
       ? _pdfPageCount
@@ -99,7 +103,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           : _isPptx
               ? _pptxSlides!.length
               : _isComic
-                  ? _comicPagePaths.length
+                  ? _comicPages.length
                   : 0;
 
   /// 当前页文本（整页翻译用）。
@@ -129,6 +133,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     // 提取完成后再跳到 clamp 后的进度页
     _pageController =
         PageController(initialPage: widget.format == 'pdf' ? 0 : widget.initialPage);
+    _continuousController.addListener(_onContinuousScroll);
     switch (widget.format) {
       case 'pdf':
         _extractPdf();
@@ -143,6 +148,75 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         _loadComic();
       default:
         _load();
+    }
+    _applyOrientation();
+  }
+
+  /// ppt/xlsx 单页模式默认横屏；连续模式竖屏（纵向滚动）。
+  void _applyOrientation() {
+    final landscape =
+        (widget.format == 'pptx' || widget.format == 'xlsx') && !_continuous;
+    SystemChrome.setPreferredOrientations(landscape
+        ? [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]
+        : [DeviceOrientation.portraitUp]);
+  }
+
+  void _toggleContinuous() {
+    setState(() {
+      _continuous = !_continuous;
+      PrefsService.instance.saveReaderContinuous(_continuous);
+    });
+    _applyOrientation();
+    if (_continuous) {
+      // 单页→连续：滚到当前页
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_scrollReady) return;
+        double target;
+        if (_contOffsets.length == _officePageCount + 1) {
+          target = _contOffsets[_currentPage.clamp(0, _officePageCount - 1)];
+        } else {
+          target = _currentPage * _continuousController.position.viewportDimension;
+        }
+        _continuousController.jumpTo(
+            math.min(target, _continuousController.position.maxScrollExtent));
+      });
+    } else {
+      // 连续→单页：跳回当前页
+      _jumpWhenReady(_currentPage);
+    }
+  }
+
+  bool get _scrollReady =>
+      _continuousController.hasClients &&
+      _continuousController.position.viewportDimension > 0;
+
+  /// 连续模式：滚动位置 → 当前页（xlsx 按 sheet 累计高度，其余按视口）。
+  void _onContinuousScroll() {
+    if (!_scrollReady || !_officeMode) return;
+    int page;
+    if (_contOffsets.length == _officePageCount + 1) {
+      // 累计偏移查找（二分）
+      final off = _continuousController.offset;
+      int lo = 0, hi = _officePageCount - 1, res = 0;
+      while (lo <= hi) {
+        final mid = (lo + hi) >> 1;
+        if (_contOffsets[mid] <= off) {
+          res = mid;
+          lo = mid + 1;
+        } else {
+          hi = mid - 1;
+        }
+      }
+      page = res;
+    } else {
+      final vp = _continuousController.position.viewportDimension;
+      page = (_continuousController.offset / vp).round();
+    }
+    page = page.clamp(0, math.max(_officePageCount - 1, 0));
+    if (page != _currentPage) {
+      _currentPage = page;
+      _saveProgress();
+      if (mounted) setState(() {});
     }
   }
 
@@ -227,18 +301,22 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           .map((k) => int.tryParse(k.substring(3)) ?? 0)
           .toList()
         ..sort();
-      final paths = <String>[];
+      final pages = <({String path, int w, int h})>[];
       for (final n in ids) {
         final info = raw['img$n'];
         if (info is Map && info['file'] is String) {
-          paths.add('$dir/${info['file']}');
+          pages.add((
+            path: '$dir/${info['file']}',
+            w: (info['w'] as num?)?.toInt() ?? 0,
+            h: (info['h'] as num?)?.toInt() ?? 0,
+          ));
         }
       }
       if (mounted) {
-        setState(() => _comicPagePaths = paths);
+        setState(() => _comicPages = pages);
       }
       _jumpWhenReady(
-          widget.initialPage.clamp(0, math.max(paths.length - 1, 0)));
+          widget.initialPage.clamp(0, math.max(pages.length - 1, 0)));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -470,7 +548,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   void dispose() {
     _saveProgress();
     _pageController.dispose();
+    _continuousController.dispose();
     _pdfDoc?.dispose();
+    // 恢复竖屏（横屏仅 ppt/xlsx 单页模式期间生效）
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     super.dispose();
   }
 
@@ -895,6 +976,62 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     );
   }
 
+  /// 连续阅读视图：按页面真实宽高比紧密堆叠（无页间空隙），
+  /// 滚动时按累计偏移定位当前页。
+  Widget _buildContinuousOffice(ReaderTheme theme) {
+    return LayoutBuilder(builder: (context, constraints) {
+      final w = constraints.maxWidth;
+      final heights = [
+        for (var i = 0; i < _officePageCount; i++) _contPageHeight(i, w)
+      ];
+      final offsets = <double>[0];
+      for (final h in heights) {
+        offsets.add(offsets.last + h);
+      }
+      _contOffsets = offsets;
+      return ListView.builder(
+        controller: _continuousController,
+        itemCount: _officePageCount,
+        itemBuilder: (context, i) => SizedBox(
+          height: heights[i],
+          child: _officePageWidget(i, theme),
+        ),
+      );
+    });
+  }
+
+  /// 连续模式第 i 页的自然高度（宽度铺满，高度按宽高比）。
+  double _contPageHeight(int i, double w) {
+    if (_isPdf) {
+      final p = _pdfDoc!.pages[i];
+      return w * p.height / p.width;
+    }
+    if (_isComic) {
+      final info = _comicPages[i];
+      return (info.w > 0 && info.h > 0) ? w * info.h / info.w : w;
+    }
+    if (_isPptx) {
+      final s = _pptxSlides![i];
+      return w * s.hEmu / s.wEmu;
+    }
+    // xlsx：内容高 + 首页顶部留白（避开悬浮顶栏）
+    return XlsxSheetView.contentHeight(_xlsxSheets![i]) + (i == 0 ? 64 : 0);
+  }
+
+  Widget _officePageWidget(int i, ReaderTheme theme) {
+    if (_isPdf) return _buildPdfPage(i + 1, theme);
+    if (_isComic) {
+      return Image.file(File(_comicPages[i].path), fit: BoxFit.fill);
+    }
+    if (_isXlsx) {
+      return Padding(
+        padding: EdgeInsets.only(top: i == 0 ? 64 : 0),
+        child: XlsxSheetView(sheet: _xlsxSheets![i], verticalScroll: false),
+      );
+    }
+    return PptxSlideView(slide: _pptxSlides![i]);
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(readerSettingsProvider);
@@ -935,7 +1072,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                             setState(() => _chromeVisible = !_chromeVisible);
                           }
                         },
-                  child: isPdf
+                  child: _officeMode && _continuous
+                      ? _buildContinuousOffice(theme)
+                      : isPdf
                       ? PageView.builder(
                           controller: _pageController,
                           itemCount: _pdfPageCount,
@@ -946,13 +1085,12 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                       : _isComic
                           ? PageView.builder(
                               controller: _pageController,
-                              itemCount: _comicPagePaths.length,
+                              itemCount: _comicPages.length,
                               onPageChanged: _onOfficePageChanged,
                               itemBuilder: (context, i) => InteractiveViewer(
                                 maxScale: 5.0,
                                 child: Center(
-                                  child: Image.file(
-                                      File(_comicPagePaths[i]),
+                                  child: Image.file(File(_comicPages[i].path),
                                       fit: BoxFit.contain),
                                 ),
                               ),
@@ -1150,6 +1288,16 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                             onPressed: () =>
                                 setState(() => _agentVisible = !_agentVisible),
                           ),
+                          if (!_editing && _officeMode)
+                            IconButton(
+                              tooltip: _continuous ? '单页模式' : '连续阅读',
+                              icon: Icon(
+                                  _continuous
+                                      ? Icons.view_day_outlined
+                                      : Icons.swap_vert,
+                                  color: theme.text),
+                              onPressed: _toggleContinuous,
+                            ),
                           if (!_editing && !_officeMode)
                             IconButton(
                             icon: Icon(Icons.text_fields, color: theme.text),

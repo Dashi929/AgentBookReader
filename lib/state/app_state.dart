@@ -35,6 +35,10 @@ class PrefsService {
   /// 书架视图：true=网格（封面块状），false=列表
   bool loadLibraryView() => sp.getBool('libraryGridView') ?? false;
   void saveLibraryView(bool grid) => sp.setBool('libraryGridView', grid);
+
+  /// 阅读视图：true=连续滚动，false=单页翻页（office/图像页格式用）
+  bool loadReaderContinuous() => sp.getBool('readerContinuous') ?? false;
+  void saveReaderContinuous(bool v) => sp.setBool('readerContinuous', v);
 }
 
 /// 支持的翻译目标语言（code, 显示名）。

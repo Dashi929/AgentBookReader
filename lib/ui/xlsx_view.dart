@@ -7,10 +7,12 @@ import '../core/parser/xlsx_extractor.dart';
 /// Excel 网格视图：近似 Office 视觉——列标/行号表头、网格线、
 /// 合并单元格、列宽/行高、加粗与对齐、数字右对齐。可双向滚动。
 class XlsxSheetView extends StatelessWidget {
-  const XlsxSheetView({super.key, required this.sheet, this.scale = 1.2});
+  const XlsxSheetView(
+      {super.key, required this.sheet, this.scale = 1.2, this.verticalScroll = true});
 
   final XlsxSheetData sheet;
   final double scale; // 字符宽度→像素
+  final bool verticalScroll; // false：纵向由外部滚动容器接管（连续模式）
 
   static const _rowHeadW = 44.0;
   static const _colHeadH = 22.0;
@@ -20,24 +22,45 @@ class XlsxSheetView extends StatelessWidget {
   double _rowPx(int i) =>
       (i < sheet.rowHeights.length ? sheet.rowHeights[i] : 15) * 4 / 3 + 2;
 
+  /// 网格内容总高（含列标表头），供连续模式计算累计偏移。
+  static double contentHeight(XlsxSheetData sheet) {
+    var h = _colHeadH;
+    for (var i = 0; i < math.max(sheet.rows, 1); i++) {
+      h += (i < sheet.rowHeights.length ? sheet.rowHeights[i] : 15) * 4 / 3 + 2;
+    }
+    return h;
+  }
+
+  double _totalW() => [
+        for (var i = 0; i < math.max(sheet.cols, 1); i++) _colPx(i)
+      ].fold<double>(0, (a, b) => a + b);
+  double _totalH() => [
+        for (var i = 0; i < math.max(sheet.rows, 1); i++) _rowPx(i)
+      ].fold<double>(0, (a, b) => a + b);
+
   @override
   Widget build(BuildContext context) {
-    final totalW = [for (var i = 0; i < math.max(sheet.cols, 1); i++) _colPx(i)]
-        .fold<double>(0, (a, b) => a + b);
-    final totalH = [for (var i = 0; i < math.max(sheet.rows, 1); i++) _rowPx(i)]
-        .fold<double>(0, (a, b) => a + b);
+    final totalW = _totalW();
+    final totalH = _totalH();
+    final grid = SizedBox(
+      width: _rowHeadW + totalW,
+      height: _colHeadH + totalH,
+      child: CustomPaint(
+        size: Size(_rowHeadW + totalW, _colHeadH + totalH),
+        painter: _XlsxGridPainter(this),
+      ),
+    );
+    if (!verticalScroll) {
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: grid,
+      );
+    }
     return SingleChildScrollView(
       scrollDirection: Axis.vertical,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
-        child: SizedBox(
-          width: _rowHeadW + totalW,
-          height: _colHeadH + totalH,
-          child: CustomPaint(
-            size: Size(_rowHeadW + totalW, _colHeadH + totalH),
-            painter: _XlsxGridPainter(this),
-          ),
-        ),
+        child: grid,
       ),
     );
   }
