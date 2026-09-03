@@ -11,10 +11,31 @@ abstract class TranslationProvider {
   Future<String> translate(String text, {required String targetLang});
 }
 
+/// 有限并发地映射（保持结果顺序）。慢提供方（LLM）的提速核心：
+/// 一次请求翻译整页要等完整往返，切成段落并发 4 路后总耗时≈最慢一段。
+Future<List<R>> mapLimited<T, R>(
+    List<T> items, int limit, Future<R> Function(T) fn) async {
+  final results = List<R?>.filled(items.length, null);
+  var next = 0;
+  Future<void> worker() async {
+    while (next < items.length) {
+      final i = next++;
+      results[i] = await fn(items[i]);
+    }
+  }
+
+  await Future.wait([
+    for (var i = 0; i < limit && i < items.length; i++) worker()
+  ]);
+  return [for (final r in results) r!];
+}
+
 /// LLM 翻译（质量最高，用已配置的模型；按用量计费但极便宜）。
+/// 长文本按段落切块并发翻译（默认 4 路），比单次大请求快数倍。
 class LlmTranslationProvider implements TranslationProvider {
-  LlmTranslationProvider(this.client);
+  LlmTranslationProvider(this.client, {this.concurrency = 4});
   final LlmClient client;
+  final int concurrency;
 
   @override
   String get id => 'llm';
@@ -23,6 +44,16 @@ class LlmTranslationProvider implements TranslationProvider {
 
   @override
   Future<String> translate(String text, {required String targetLang}) async {
+    final chunks = splitTranslationChunks(text, maxChunkChars: 1800);
+    if (chunks.length <= 1) {
+      return _translateOnce(chunks.isEmpty ? '' : chunks.first, targetLang);
+    }
+    final parts = await mapLimited(chunks, concurrency,
+        (c) => _translateOnce(c, targetLang));
+    return parts.join('\n\n');
+  }
+
+  Future<String> _translateOnce(String text, String targetLang) async {
     final resp = await client.chat(messages: [
       LlmMessage.system(
           '你是专业译者。将用户提供的文本翻译成${_langName(targetLang)}，'
@@ -30,6 +61,25 @@ class LlmTranslationProvider implements TranslationProvider {
       LlmMessage.user(text),
     ], temperature: 0.3);
     return resp.content ?? '';
+  }
+
+  /// 按段落切块：尽量按空行分段，单段过长再按行切；保证顺序。
+  static List<String> splitTranslationChunks(String text,
+      {int maxChunkChars = 1800}) {
+    if (text.length <= maxChunkChars) return [text];
+    final paras = text.split('\n\n');
+    final chunks = <String>[];
+    final buf = StringBuffer();
+    for (final para in paras) {
+      if (buf.isNotEmpty && buf.length + para.length > maxChunkChars) {
+        chunks.add(buf.toString());
+        buf.clear();
+      }
+      if (buf.isNotEmpty) buf.write('\n\n');
+      buf.write(para);
+    }
+    if (buf.isNotEmpty) chunks.add(buf.toString());
+    return chunks;
   }
 
   static String _langName(String code) => switch (code) {

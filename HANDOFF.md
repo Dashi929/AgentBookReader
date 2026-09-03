@@ -143,6 +143,34 @@ lib/
 - Agent 流式输出（SSE）；OPDS/书源已被用户永久排除
 - 多语言补全（ARB 机制已就绪，新增界面必须同步 zh/en）
 
+## 十二、第五轮变更（2026-09-03）：书架双视图/详情页 + xlsx/pptx/cbz
+
+### 书架与详情页
+- 书架网格/列表双视图（PrefsService 'libraryGridView'）；网格卡片=封面/书名/作者/进度，长按删除
+- 点击书目进**详情页**（book_detail_screen.dart）：封面/书名/作者/简介/章节/预览/开始阅读/AI 补全/Agent 工作台入口
+- 元数据：Documents 表加 author/synopsis/coverPath（schemaVersion 2 自动迁移）；BookEntry 同步扩展 + updateMeta
+- 元数据提取：EpubExtractor/DocxExtractor/XlsxExtractor/PptxExtractor.extractMetadata；pdf 用首页渲染做封面（renderPdfPagePng → core/io/pdf_render.dart）；txt 等取开头 160 字做简介；缺失可"AI 补全信息"（LLM 返回 JSON，_extractJson 容错）
+- 踩坑：Row 内封面（height: infinity）纵向无界 → 整页绘制空白，必须显式限高
+
+### 新格式（xlsx/pptx/cbz，均走文本/图片管道）
+- **xlsx**：workbook.xml→rels→worksheets，sharedStrings 展开，单元格按 r:ref 定位（跳列补空），每 sheet 一个 # 节 + md 表格（首行表头），maxRows=500 截断；图表/公式丢失
+- **pptx**：presentation.xml sldIdLst 顺序 → slides；ph type=title/ctrTitle → 节标题，a:p→正文行；a:blip→slide rels→ppt/media 转 [[IMG]] 占位段（图示保留）
+- **cbz**（漫画）：ZIP 内图片自然排序（数字感知）→ 每页 [[IMG]] 占位段，复用 docx/epub 图片渲染管线；**不支持 cbr**（RAR 无纯 Dart 解码器）
+- OOXML 解析关键：xml 包 findAllElements 按限定名匹配，真实文件带 p:/a: 前缀会全空 → 解析前用 `OoxmlCore.stripNs` 剥元素前缀（属性前缀保留，r:id/r:embed 走 namespaceUri 查询）；stripNs 正则必须锚定 '<'，否则会剥坏 xmlns 属性
+- format 存储：BookEntry.extension 存原始扩展名，reader/detail 的 format switch 加 'xlsx'/'pptx'/'cbz' → DocFormat.md
+
+### xlsx/pptx/cbz 原版渲染模式（用户反馈"要 Office 打开的样子"后重做）
+- **xlsx**：`parseXlsxSheets`（xlsx_extractor.dart）解析列宽(<col>)/行高(ht)/合并(mergeCell)/样式(styles.xml fonts+cellXfs: 加粗/对齐)，`ui/xlsx_view.dart` CustomPaint 网格绘制（A/B/C 列标、行号、网格线、白底、数字右对齐、超宽省略）；每 sheet 一页 PageView，可横向滚动
+- **pptx**：`parsePptxSlides` 解析 sldSz/xfrm(off,ext EMU)/rPr(sz,b,srgbClr)/algn/图片(a:blip→rels→media 字节)，`ui/pptx_view.dart` 按 EMU 比例摆放文本框与图片（1pt=12700 EMU，字号 pt×12700×pxPerEmu）；无 xfrm 的形状回退左上角线性布局
+- **cbz**：整页 PageView 漫画模式（图片来自导入落盘的 manifest imgN），隐藏编辑/翻译/字号按钮
+- 三种格式 format=原始扩展名（导入跳转曾误传 'md' 导致进文本管线——已修）；提取文字仍保留（_officePageTexts）供 Agent/整页翻译；编辑/字号隐藏，选块翻译禁用
+- 大坑：bash heredoc 生成 dart 代码时 `'\'` 转义层层剥皮 → 出现 `replaceAll(r'', '/')`（空串匹配，文件名查找全失效，症状=xlsx 解析 0 sheets）。dart 里反斜杠用 `String.fromCharCode(92)` 最稳
+
+### LLM 翻译提速（2026-09-03）
+- 选块/整页：`LlmTranslationProvider.translate` 按段落切块（≤1800 字符，splitTranslationChunks 纯函数）+ `mapLimited` 4 路并发，总耗时≈最慢一块
+- 整篇任务：`WholeDocTranslationTask.run` 改为按节并发（concurrency=3），取消检查紧贴 translate 调用（保持旧"取消后不再发起新翻译"语义）；结果按 (docIdx,sectionIndex) 对齐拼装（曾用任务扁平序号 vs 文档序号比较导致多节文档丢节——单测覆盖）
+- 流式输出（SSE）未做：感知优化，后续候选
+
 ## 七、常用命令
 
 ```powershell

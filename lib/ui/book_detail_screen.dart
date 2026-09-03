@@ -10,7 +10,10 @@ import '../agent/agent_settings.dart';
 import '../agent/llm_client.dart';
 import '../core/controller/plain_text_document.dart';
 import '../core/model/char_range.dart' show DocFormat;
+import '../core/parser/cbz_extractor.dart';
 import '../core/parser/docx_extractor.dart';
+import '../core/parser/pptx_extractor.dart';
+import '../core/parser/xlsx_extractor.dart';
 import '../core/parser/epub_extractor.dart';
 import '../core/io/text_decoder.dart';
 import '../l10n/app_localizations.dart';
@@ -97,11 +100,14 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
       final content = switch (ext) {
         'docx' => DocxExtractor.extractAsMarkdown(bytes),
         'epub' => EpubExtractor.extractAsMarkdown(bytes),
+        'xlsx' => XlsxExtractor.extractAsMarkdown(bytes),
+        'pptx' => PptxExtractor.extractAsMarkdown(bytes),
+        'cbz' => CbzExtractor.extractAsMarkdown(bytes),
         _ => TextDecoder.decode(bytes),
       };
       _content = content;
       final format = switch (ext) {
-        'md' || 'docx' || 'epub' => DocFormat.md,
+        'md' || 'docx' || 'epub' || 'xlsx' || 'pptx' || 'cbz' => DocFormat.md,
         'json' => DocFormat.json,
         _ => DocFormat.txt,
       };

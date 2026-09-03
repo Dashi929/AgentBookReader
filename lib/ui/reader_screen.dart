@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
@@ -23,6 +24,10 @@ import '../infra/agent_repository.dart';
 import '../l10n/app_localizations.dart';
 import '../state/app_state.dart';
 import 'agent_panel.dart';
+import 'pptx_view.dart';
+import 'xlsx_view.dart';
+import '../core/parser/pptx_extractor.dart';
+import '../core/parser/xlsx_extractor.dart';
 
 /// 阅读器：分页翻页 / 主题 / 字号 / 进度记忆 / Agent / 编辑 / 整页与选块翻译。
 /// 布局采用覆盖层：顶栏与页码悬浮在内容上方，显隐切换不改变内容区尺寸，
@@ -77,6 +82,32 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
   bool get _isPdf => widget.format == 'pdf' && _pdfDoc != null;
 
+  // xlsx/pptx/cbz 专属渲染模式（Office 视觉近似 / 漫画整页）
+  List<XlsxSheetData>? _xlsxSheets;
+  List<PptSlideData>? _pptxSlides;
+  List<String> _comicPagePaths = const [];
+  List<String> _officePageTexts = const []; // 每页文本（整页翻译用）
+
+  bool get _isXlsx => widget.format == 'xlsx' && _xlsxSheets != null;
+  bool get _isPptx => widget.format == 'pptx' && _pptxSlides != null;
+  bool get _isComic => widget.format == 'cbz' && _comicPagePaths.isNotEmpty;
+  bool get _officeMode => _isPdf || _isXlsx || _isPptx || _isComic;
+  int get _officePageCount => _isPdf
+      ? _pdfPageCount
+      : _isXlsx
+          ? _xlsxSheets!.length
+          : _isPptx
+              ? _pptxSlides!.length
+              : _isComic
+                  ? _comicPagePaths.length
+                  : 0;
+
+  /// 当前页文本（整页翻译用）。
+  String get _currentPageOfficeText =>
+      (_currentPage >= 0 && _currentPage < _officePageTexts.length)
+          ? _officePageTexts[_currentPage]
+          : '';
+
   _TranslateMode _translateMode = _TranslateMode.none;
   int? _selectedParagraph; // 选块模式下被选中的段落
   bool _translating = false;
@@ -98,16 +129,127 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     // 提取完成后再跳到 clamp 后的进度页
     _pageController =
         PageController(initialPage: widget.format == 'pdf' ? 0 : widget.initialPage);
-    if (widget.format == 'pdf') {
-      _extractPdf();
-    } else {
-      _load();
+    switch (widget.format) {
+      case 'pdf':
+        _extractPdf();
+      case 'xlsx':
+        _load();
+        _loadXlsx();
+      case 'pptx':
+        _load();
+        _loadPptx();
+      case 'cbz':
+        _load();
+        _loadComic();
+      default:
+        _load();
+    }
+  }
+
+  Future<void> _loadXlsx() async {
+    try {
+      final path = widget.entryId == null
+          ? null
+          : _libraryNotifier?.byId(widget.entryId!)?.path;
+      if (path == null) throw '缺少文件路径';
+      final bytes = await File(path).readAsBytes();
+      final sheets = parseXlsxSheets(bytes);
+      final texts = <String>[];
+      for (final sh in sheets) {
+        final buf = StringBuffer('# ${sh.name}\n');
+        for (var r = 0; r < sh.rows; r++) {
+          final cells = sh.cells[r] ?? const {};
+          if (cells.isEmpty) continue;
+          buf.writeln([
+            for (var c = 0; c < sh.cols; c++) cells[c]?.text ?? ''
+          ].join(' | '));
+        }
+        texts.add(buf.toString());
+      }
+      if (mounted) {
+        setState(() {
+          _xlsxSheets = sheets;
+          _officePageTexts = texts;
+        });
+      }
+      _jumpWhenReady(
+          widget.initialPage.clamp(0, math.max(sheets.length - 1, 0)));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('表格解析失败：$e')));
+      }
+    }
+  }
+
+  Future<void> _loadPptx() async {
+    try {
+      final path = widget.entryId == null
+          ? null
+          : _libraryNotifier?.byId(widget.entryId!)?.path;
+      if (path == null) throw '缺少文件路径';
+      final bytes = await File(path).readAsBytes();
+      final slides = parsePptxSlides(bytes);
+      final texts = <String>[];
+      for (final sl in slides) {
+        texts.add(sl.boxes
+            .expand((b) => b.paras)
+            .map((p) => p.text)
+            .join('\n'));
+      }
+      if (mounted) {
+        setState(() {
+          _pptxSlides = slides;
+          _officePageTexts = texts;
+        });
+      }
+      _jumpWhenReady(
+          widget.initialPage.clamp(0, math.max(slides.length - 1, 0)));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('演示文稿解析失败：$e')));
+      }
+    }
+  }
+
+  /// 漫画：读导入时落盘的页面图（manifest imgN 按编号排序）。
+  Future<void> _loadComic() async {
+    try {
+      if (widget.entryId == null) throw '缺少条目';
+      final support = await getApplicationSupportDirectory();
+      final dir = '${support.path}/images/${widget.entryId}';
+      final f = File('$dir/manifest.json');
+      if (!f.existsSync()) throw '没有页面数据';
+      final raw = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
+      final ids = raw.keys
+          .where((k) => k.startsWith('img'))
+          .map((k) => int.tryParse(k.substring(3)) ?? 0)
+          .toList()
+        ..sort();
+      final paths = <String>[];
+      for (final n in ids) {
+        final info = raw['img$n'];
+        if (info is Map && info['file'] is String) {
+          paths.add('$dir/${info['file']}');
+        }
+      }
+      if (mounted) {
+        setState(() => _comicPagePaths = paths);
+      }
+      _jumpWhenReady(
+          widget.initialPage.clamp(0, math.max(paths.length - 1, 0)));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('漫画加载失败：$e')));
+      }
     }
   }
 
   Future<void> _load() async {
     final format = switch (widget.format) {
-      'md' => DocFormat.md,
+      'md' || 'xlsx' || 'pptx' || 'cbz' => DocFormat.md,
       'json' => DocFormat.json,
       _ => DocFormat.txt,
     };
@@ -615,12 +757,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     PrefsService.instance.saveTargetLang(langCode);
     final langName = targetLangName(langCode);
 
-    // PDF 原版渲染模式：无选块（显示的是页面图），整页翻译用提取文字
-    if (_isPdf) {
-      final text = (_currentPage >= 0 && _currentPage < _pdfPageTexts.length
-              ? _pdfPageTexts[_currentPage]
-              : '')
-          .trim();
+    // Office/漫画原版渲染模式：无选块，整页翻译用提取文字
+    if (_officeMode) {
+      final text = _currentPageOfficeText.trim();
       if (text.isEmpty) return;
       await _translateAndShow(text,
           title: '整页 · 第${_currentPage + 1}页 · $langName',
@@ -762,9 +901,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     final theme = ReaderTheme.presets[settings.theme.clamp(0, 2)];
     final s = AppLocalizations.of(context)!;
     final doc = _activeDoc;
-    final selecting = _translateMode == _TranslateMode.block && !_isPdf;
+    final selecting = _translateMode == _TranslateMode.block && !_officeMode;
     final isPdf = _isPdf;
-    final pageCount = isPdf ? _pdfPageCount : _pages.length;
+    final pageCount = _officeMode ? _officePageCount : _pages.length;
     return Scaffold(
       backgroundColor: theme.background,
       body: doc == null
@@ -800,15 +939,48 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                       ? PageView.builder(
                           controller: _pageController,
                           itemCount: _pdfPageCount,
-                          onPageChanged: (page) {
-                            _currentPage = page;
-                            setState(() {});
-                            _saveProgress();
-                          },
+                          onPageChanged: _onOfficePageChanged,
                           itemBuilder: (context, i) =>
                               _buildPdfPage(i + 1, theme),
                         )
-                      : LayoutBuilder(builder: (context, constraints) {
+                      : _isComic
+                          ? PageView.builder(
+                              controller: _pageController,
+                              itemCount: _comicPagePaths.length,
+                              onPageChanged: _onOfficePageChanged,
+                              itemBuilder: (context, i) => InteractiveViewer(
+                                maxScale: 5.0,
+                                child: Center(
+                                  child: Image.file(
+                                      File(_comicPagePaths[i]),
+                                      fit: BoxFit.contain),
+                                ),
+                              ),
+                            )
+                          : _isXlsx
+                              ? PageView.builder(
+                                  controller: _pageController,
+                                  itemCount: _xlsxSheets!.length,
+                                  onPageChanged: _onOfficePageChanged,
+                                  itemBuilder: (context, i) => SafeArea(
+                                    child: Padding(
+                                      // 顶栏悬浮在内容上方，留出头部空间
+                                      padding: const EdgeInsets.only(top: 64),
+                                      child: XlsxSheetView(
+                                          sheet: _xlsxSheets![i]),
+                                    ),
+                                  ),
+                                )
+                              : _isPptx
+                                  ? PageView.builder(
+                                      controller: _pageController,
+                                      itemCount: _pptxSlides!.length,
+                                      onPageChanged: _onOfficePageChanged,
+                                      itemBuilder: (context, i) =>
+                                          PptxSlideView(
+                                              slide: _pptxSlides![i]),
+                                    )
+                                  : LayoutBuilder(builder: (context, constraints) {
                     _repaginateIfNeeded(
                         doc,
                         constraints.maxWidth - 32,
@@ -918,7 +1090,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                               icon: Icon(Icons.close, color: theme.text),
                               onPressed: _cancelEditing,
                             ),
-                          ] else if (!isPdf)
+                          ] else if (!_officeMode)
                             IconButton(
                               tooltip: '编辑本节',
                               icon:
@@ -926,15 +1098,30 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                               onPressed: () => _startEditing(doc),
                             ),
                           if (!_editing &&
-                              (isPdf || doc.document.sections.length > 1))
+                              (isPdf ||
+                                  _isXlsx ||
+                                  _isPptx ||
+                                  doc.document.sections.length > 1))
                             IconButton(
                               tooltip: s.chapters,
                               icon: Icon(Icons.menu_book, color: theme.text),
-                              onPressed: isPdf
-                                  ? _showPdfChapterList
-                                  : _showSectionList,
+                              onPressed: () {
+                                if (isPdf) {
+                                  _showPdfChapterList();
+                                } else if (_isXlsx) {
+                                  _showOfficeChapterList(
+                                      [for (final sh in _xlsxSheets!) sh.name]);
+                                } else if (_isPptx) {
+                                  _showOfficeChapterList([
+                                    for (var i = 0; i < _pptxSlides!.length; i++)
+                                      _pptxSlides![i].title ?? '幻灯片 ${i + 1}'
+                                  ]);
+                                } else {
+                                  _showSectionList();
+                                }
+                              },
                             ),
-                          if (!_editing)
+                          if (!_editing && !_isComic)
                             IconButton(
                             tooltip: _translating ? '翻译中…' : s.translate,
                             icon: _translating
@@ -963,7 +1150,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                             onPressed: () =>
                                 setState(() => _agentVisible = !_agentVisible),
                           ),
-                          if (!_editing && !isPdf)
+                          if (!_editing && !_officeMode)
                             IconButton(
                             icon: Icon(Icons.text_fields, color: theme.text),
                             onPressed: () =>
@@ -1140,6 +1327,36 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: children,
+      ),
+    );
+  }
+
+  void _onOfficePageChanged(int page) {
+    _currentPage = page;
+    setState(() {});
+    _saveProgress();
+  }
+
+  /// xlsx sheet / pptx slide 目录（标题列表，点击跳转）。
+  void _showOfficeChapterList(List<String> titles) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.6,
+          child: ListView.builder(
+            itemCount: titles.length,
+            itemBuilder: (context, i) => ListTile(
+              dense: true,
+              leading: const Icon(Icons.article_outlined, size: 18),
+              title: Text(titles[i], maxLines: 1),
+              onTap: () {
+                Navigator.pop(context);
+                _jumpWhenReady(i.clamp(0, _officePageCount - 1));
+              },
+            ),
+          ),
+        ),
       ),
     );
   }

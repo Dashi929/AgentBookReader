@@ -6,6 +6,18 @@ import 'package:agent_book_reader/agent/llm_client.dart';
 import 'package:agent_book_reader/agent/translation_providers.dart';
 
 void main() {
+  test('splitTranslationChunks：按段落切块、顺序保持、单块不切', () {
+    expect(LlmTranslationProvider.splitTranslationChunks('短文本'), ['短文本']);
+    final sep = String.fromCharCode(10) * 2;
+    final long = List.generate(50, (i) => '段落$i' * 30).join(sep);
+    final chunks = LlmTranslationProvider.splitTranslationChunks(long, maxChunkChars: 600);
+    expect(chunks.length, greaterThan(1));
+    expect(chunks.join(sep), long); // 内容无损且顺序保持
+    for (final c in chunks) {
+      expect(c.length, lessThan(600 + 300)); // 单段超长时允许超出
+    }
+  });
+
   late HttpServer server;
   late String baseUrl;
   final requests = <Uri>[];

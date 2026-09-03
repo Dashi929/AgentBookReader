@@ -11,7 +11,10 @@ import '../core/io/pdf_render.dart';
 import '../core/io/text_decoder.dart';
 import '../core/model/book_metadata.dart';
 import '../core/model/extracted_image.dart';
+import '../core/parser/cbz_extractor.dart';
 import '../core/parser/docx_extractor.dart';
+import '../core/parser/pptx_extractor.dart';
+import '../core/parser/xlsx_extractor.dart';
 import '../core/parser/epub_extractor.dart';
 import '../l10n/app_localizations.dart';
 import 'package:path_provider/path_provider.dart';
@@ -25,7 +28,9 @@ import 'reader_screen.dart';
 class LibraryPage extends ConsumerWidget {
   const LibraryPage({super.key});
 
-  static const _allowedExt = {'txt', 'md', 'json', 'docx', 'epub', 'pdf'};
+  static const _allowedExt = {
+    'txt', 'md', 'json', 'docx', 'epub', 'pdf', 'xlsx', 'pptx', 'cbz'
+  };
 
   Future<void> _import(BuildContext context, WidgetRef ref) async {
     final s = AppLocalizations.of(context)!;
@@ -79,6 +84,20 @@ class LibraryPage extends ConsumerWidget {
           format = 'md';
           content = r.markdown;
           extractedImages = r.images;
+        } else if (ext == 'xlsx' || ext == 'pptx' || ext == 'cbz') {
+          // 保持原始扩展名作为 format：阅读器按扩展名走专属渲染视图
+          format = ext;
+          if (ext == 'xlsx') {
+            content = XlsxExtractor.extractAsMarkdown(rawBytes);
+          } else if (ext == 'pptx') {
+            final r = PptxExtractor.extractAsMarkdownWithImages(rawBytes);
+            content = r.markdown;
+            extractedImages = r.images;
+          } else {
+            final r = CbzExtractor.extractPages(rawBytes);
+            content = r.markdown;
+            extractedImages = r.images;
+          }
         } else {
           format = ext;
           content = TextDecoder.decode(rawBytes);
@@ -154,6 +173,12 @@ class LibraryPage extends ConsumerWidget {
           return EpubExtractor.extractMetadata(rawBytes);
         case 'docx':
           return DocxExtractor.extractMetadata(rawBytes);
+        case 'xlsx':
+          return XlsxExtractor.extractMetadata(rawBytes);
+        case 'pptx':
+          return PptxExtractor.extractMetadata(rawBytes);
+        case 'cbz':
+          return const BookMetadata();
         case 'pdf':
           final pdf = await PdfDocument.openData(rawBytes);
           Uint8List? cover;
