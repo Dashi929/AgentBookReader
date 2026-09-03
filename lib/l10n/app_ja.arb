@@ -102,5 +102,20 @@
         "type": "String"
       }
     }
-  }
+  },
+  "readingProgress": "読書の進捗",
+  "readingSettings": "読書設定",
+  "search": "検索",
+  "brightness": "明るさ",
+  "lineSpacing": "行間",
+  "paraSpacing": "段落間隔",
+  "pageMargin": "余白",
+  "jumpToPage": "ページへ移動",
+  "keepAwake": "画面を常にオン",
+  "immersiveMode": "没入モード（ステータスバー非表示）",
+  "searchHint": "本の中を検索…",
+  "noResults": "結果なし",
+  "searchIn": "検索結果",
+  "theme": "テーマ",
+  "fontSize": "文字サイズ"
 }

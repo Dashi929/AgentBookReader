@@ -111,5 +111,20 @@
   "copySelected": "Copy selection",
   "translateSelected": "Translate selection",
   "noPageText": "(No selectable text on this page)",
-  "editCacheSaved": "Saved to edit cache; choose save/overwrite on exit"
+  "editCacheSaved": "Saved to edit cache; choose save/overwrite on exit",
+  "readingProgress": "Reading progress",
+  "readingSettings": "Reading settings",
+  "search": "Search",
+  "brightness": "Brightness",
+  "lineSpacing": "Line spacing",
+  "paraSpacing": "Paragraph spacing",
+  "pageMargin": "Page margin",
+  "jumpToPage": "Jump to page",
+  "keepAwake": "Keep screen on",
+  "immersiveMode": "Immersive (hide status bar)",
+  "searchHint": "Search in book…",
+  "noResults": "No results",
+  "searchIn": "Results",
+  "theme": "Theme",
+  "fontSize": "Font size"
 }

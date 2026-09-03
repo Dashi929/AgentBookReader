@@ -207,4 +207,49 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get editCacheSaved =>
       'Saved to edit cache; choose save/overwrite on exit';
+
+  @override
+  String get readingProgress => 'Reading progress';
+
+  @override
+  String get readingSettings => 'Reading settings';
+
+  @override
+  String get search => 'Search';
+
+  @override
+  String get brightness => 'Brightness';
+
+  @override
+  String get lineSpacing => 'Line spacing';
+
+  @override
+  String get paraSpacing => 'Paragraph spacing';
+
+  @override
+  String get pageMargin => 'Page margin';
+
+  @override
+  String get jumpToPage => 'Jump to page';
+
+  @override
+  String get keepAwake => 'Keep screen on';
+
+  @override
+  String get immersiveMode => 'Immersive (hide status bar)';
+
+  @override
+  String get searchHint => 'Search in book…';
+
+  @override
+  String get noResults => 'No results';
+
+  @override
+  String get searchIn => 'Results';
+
+  @override
+  String get theme => 'Theme';
+
+  @override
+  String get fontSize => 'Font size';
 }

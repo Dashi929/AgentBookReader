@@ -23,6 +23,18 @@ class PrefsService {
   void saveThemeIndex(int i) => sp.setInt('readerTheme', i);
   double loadFontSize() => sp.getDouble('fontSize') ?? 18;
   void saveFontSize(double v) => sp.setDouble('fontSize', v);
+  double loadLineHeight() => sp.getDouble('readerLineHeight') ?? 1.6;
+  void saveLineHeight(double v) => sp.setDouble('readerLineHeight', v);
+  double loadParaSpacing() => sp.getDouble('readerParaSpacing') ?? 10;
+  void saveParaSpacing(double v) => sp.setDouble('readerParaSpacing', v);
+  double loadReaderMargin() => sp.getDouble('readerMargin') ?? 16;
+  void saveReaderMargin(double v) => sp.setDouble('readerMargin', v);
+  double loadBrightness() => sp.getDouble('readerBrightness') ?? 1.0;
+  void saveBrightness(double v) => sp.setDouble('readerBrightness', v);
+  bool loadKeepAwake() => sp.getBool('readerKeepAwake') ?? false;
+  void saveKeepAwake(bool v) => sp.setBool('readerKeepAwake', v);
+  bool loadImmersive() => sp.getBool('readerImmersive') ?? false;
+  void saveImmersive(bool v) => sp.setBool('readerImmersive', v);
 
   /// 翻译服务（llm | mymemory | google）
   String loadTranslationProvider() => sp.getString('translateProvider') ?? 'llm';
@@ -35,6 +47,17 @@ class PrefsService {
   /// 书架视图：true=网格（封面块状），false=列表
   bool loadLibraryView() => sp.getBool('libraryGridView') ?? false;
   void saveLibraryView(bool grid) => sp.setBool('libraryGridView', grid);
+
+  /// Agent 输入历史（最近 30 条，最新在前，去重）
+  List<String> loadAgentInputHistory() =>
+      sp.getStringList('agentInputHistory') ?? const [];
+  void appendAgentInputHistory(String text) {
+    final list = loadAgentInputHistory()
+      ..remove(text)
+      ..insert(0, text);
+    sp.setStringList(
+        'agentInputHistory', list.take(30).toList());
+  }
 
   /// 应用语言（''=跟随系统；en / zh / zh_TW / ja）
   String loadAppLocale() => sp.getString('appLocale') ?? '';
@@ -244,27 +267,73 @@ class ReaderTheme {
     ReaderTheme(Color(0xFFFFFFFF), Color(0xFF222222), '白'),
     ReaderTheme(Color(0xFFF5EFDC), Color(0xFF3B3229), '护眼'),
     ReaderTheme(Color(0xFF1B1B1F), Color(0xFFB8BDC4), '夜间'),
+    ReaderTheme(Color(0xFF000000), Color(0xFF9AA3AB), '纯黑'),
   ];
 }
 
-class ReaderSettingsNotifier
-    extends StateNotifier<({int theme, double fontSize})> {
+typedef ReaderSettings = ({
+  int theme,
+  double fontSize,
+  double lineHeight,
+  double paraSpacing,
+  double margin,
+  double brightness,
+  bool keepAwake,
+  bool immersive,
+});
+
+class ReaderSettingsNotifier extends StateNotifier<ReaderSettings> {
   ReaderSettingsNotifier()
       : super((
           theme: PrefsService.instance.loadThemeIndex(),
           fontSize: PrefsService.instance.loadFontSize(),
+          lineHeight: PrefsService.instance.loadLineHeight(),
+          paraSpacing: PrefsService.instance.loadParaSpacing(),
+          margin: PrefsService.instance.loadReaderMargin(),
+          brightness: PrefsService.instance.loadBrightness(),
+          keepAwake: PrefsService.instance.loadKeepAwake(),
+          immersive: PrefsService.instance.loadImmersive(),
         ));
 
-  void setTheme(int i) {
-    PrefsService.instance.saveThemeIndex(i);
-    state = (theme: i, fontSize: state.fontSize);
+  ReaderSettings _copy(
+      {int? theme,
+      double? fontSize,
+      double? lineHeight,
+      double? paraSpacing,
+      double? margin,
+      double? brightness,
+      bool? keepAwake,
+      bool? immersive}) {
+    final c = state;
+    return (
+      theme: theme ?? c.theme,
+      fontSize: fontSize ?? c.fontSize,
+      lineHeight: lineHeight ?? c.lineHeight,
+      paraSpacing: paraSpacing ?? c.paraSpacing,
+      margin: margin ?? c.margin,
+      brightness: brightness ?? c.brightness,
+      keepAwake: keepAwake ?? c.keepAwake,
+      immersive: immersive ?? c.immersive,
+    );
   }
 
-  void setFontSize(double v) {
-    PrefsService.instance.saveFontSize(v);
-    state = (theme: state.theme, fontSize: v);
-  }
+  void setTheme(int i) =>
+      state = _copy(theme: i);
+
+  void setFontSize(double v) => state = _copy(fontSize: v);
+
+  void setLineHeight(double v) => state = _copy(lineHeight: v);
+
+  void setParaSpacing(double v) => state = _copy(paraSpacing: v);
+
+  void setMargin(double v) => state = _copy(margin: v);
+
+  void setBrightness(double v) => state = _copy(brightness: v);
+
+  void setKeepAwake(bool v) => state = _copy(keepAwake: v);
+
+  void setImmersive(bool v) => state = _copy(immersive: v);
 }
 
 final readerSettingsProvider = StateNotifierProvider<ReaderSettingsNotifier,
-    ({int theme, double fontSize})>((ref) => ReaderSettingsNotifier());
+    ReaderSettings>((ref) => ReaderSettingsNotifier());

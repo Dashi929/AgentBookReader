@@ -204,4 +204,49 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get editCacheSaved => '編集キャッシュに保存しました（終了時に保存方法を選択）';
+
+  @override
+  String get readingProgress => '読書の進捗';
+
+  @override
+  String get readingSettings => '読書設定';
+
+  @override
+  String get search => '検索';
+
+  @override
+  String get brightness => '明るさ';
+
+  @override
+  String get lineSpacing => '行間';
+
+  @override
+  String get paraSpacing => '段落間隔';
+
+  @override
+  String get pageMargin => '余白';
+
+  @override
+  String get jumpToPage => 'ページへ移動';
+
+  @override
+  String get keepAwake => '画面を常にオン';
+
+  @override
+  String get immersiveMode => '没入モード（ステータスバー非表示）';
+
+  @override
+  String get searchHint => '本の中を検索…';
+
+  @override
+  String get noResults => '結果なし';
+
+  @override
+  String get searchIn => '検索結果';
+
+  @override
+  String get theme => 'テーマ';
+
+  @override
+  String get fontSize => '文字サイズ';
 }

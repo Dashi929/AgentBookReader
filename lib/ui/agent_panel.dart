@@ -69,6 +69,7 @@ class _AgentPanelState extends ConsumerState<AgentPanel> {
   Future<void> _send() async {
     final text = _input.text.trim();
     if (text.isEmpty || _busy) return;
+    PrefsService.instance.appendAgentInputHistory(text);
     // 会话初始化是异步的：未就绪时先等它完成，避免丢消息
     if (_repo == null || _sessionId == null) {
       _addEntry('system', '会话尚未就绪，请稍候重试');
@@ -127,6 +128,41 @@ class _AgentPanelState extends ConsumerState<AgentPanel> {
       if (mounted) setState(() => _busy = false);
       _scrollToBottom();
     }
+  }
+
+  /// 输入历史：点选回填输入框。
+  void _showInputHistory() {
+    final history = PrefsService.instance.loadAgentInputHistory();
+    if (history.isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('还没有输入历史')));
+      return;
+    }
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(12),
+              child: Text('输入历史',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+            for (final h in history)
+              ListTile(
+                dense: true,
+                leading: const Icon(Icons.history, size: 18),
+                title: Text(h, maxLines: 2, overflow: TextOverflow.ellipsis),
+                onTap: () {
+                  _input.text = h;
+                  Navigator.pop(context);
+                },
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _addEntry(String role, String text) {
@@ -249,6 +285,11 @@ class _AgentPanelState extends ConsumerState<AgentPanel> {
                 borderRadius:
                     const BorderRadius.vertical(bottom: Radius.circular(12))),
             child: Row(children: [
+              IconButton(
+                icon: Icon(Icons.history, size: 20, color: theme.text),
+                tooltip: '输入历史',
+                onPressed: _busy ? null : _showInputHistory,
+              ),
               Expanded(
                 child: TextField(
                   controller: _input,

@@ -196,6 +196,31 @@ lib/
 - **缩放重构**：单页模式逐页 InteractiveViewer 在 PageView 内会与横滑手势竞争（缩放经常被翻页抢走）→ 改为自研 `_PinchZoom`（Listener 手动跟踪双指，不进 gesture arena）：单指翻页/点击翻页/双指缩放(1~5x)+双指拖动平移，key=页号实现翻页重置；连续模式为整体缩放（Listener+Transform 包整个 ListView，单指滚动不受影响）
 - pdf/comic/pptx/xlsx/text 单页统一包 _PinchZoom；xlsx 保留内部纵向/横向滚动（scale=1 时可达边缘，放大后双指拖动）
 
+### 详情页改进（2026-09-03）
+- Start Reading 按钮移到章节列表之前；阅读进度独立成行（teal 加粗，原先是 meta 里的小字，用户没看到）
+- 章节可点击跳转：ReaderScreen 新增 `initialSection` 参数（优先级高于 initialPage）——文字格式跳该节第一段所在页（_pageForSection）；pdf 章节跳书签页码；xlsx/pptx 节序==页序直接跳页
+- 坑：长文件 python 批量替换易失配/越界误删（详情页尾部类被吞）→ 用 git show HEAD 取原文件重新套补丁最稳
+
+### Agent 入口与输入历史（2026-09-03）
+- 阅读器右下角 Agent FAB 移除（顶栏 ✦ 按钮是唯一入口；FAB 曾挡住面板输入框）
+- Agent 输入历史：Prefs 'agentInputHistory'（30 条去重），发送时记录；输入框左侧 ⟲ 按钮弹出列表点选回填
+- 坑：python str.replace 不匹配时静默跳过——批量补丁后必须 grep 验证目标代码真的变了
+
+### 阅读设置面板 + 搜索 + 预渲染（2026-09-03）
+- 顶栏新增 tune（阅读设置）与 search（全书搜索）按钮；原字号/主题按钮并入设置面板
+- 阅读设置面板（底部弹窗）：主题四选（新增**纯黑** #000）、字号、行距(1.0-2.4)、段距(0-32)、页边距(0-64)、亮度(5%-100% 黑色遮罩 IgnorePointer)、跳页滑杆、屏幕常亮(wakelock_plus)、沉浸模式(immersiveSticky)——全部持久化
+- 行距接线：Paginator 已有 lineHeight/paragraphSpacing 参数，reader 传 settings 值；渲染侧 TextSpan 也带 height（与测量一致）；分页 key 加入行距/段距
+- 全书搜索：文字格式按分页页、office 按文字层页匹配，结果带上下文片段，点击跳页（单页 _jumpWhenReady / 连续 offset）
+- PDF 相邻页预渲染：当前页渲染完成后 _preRenderNeighbors(p±1) 入队
+- 坑：Dart record 字面量不支持 `...spread`（编译错）——用显式 _copy()；Listener 手动手势不进 arena 的特性用于连续/单页缩放
+
+### 图片变小 bug（2026-09-03 修复）
+- 症状：编辑过的 epub/docx 重开后内嵌图片显示为小图（312×116 而非 988×368）
+- 根因：编辑时光标粘在 `[[IMG:img1]]` 行内追加文字（如 `[[IMG:img1]]X`），占位符不再独立成行 → 分页的整行锚定正则失配 → 按普通文字行（51px）排版 → 渲染时图片塞进小行
+- 修复：① `_applyEditing` 确认时用 `ensureStandaloneImageLines`（extracted_image.dart，非锚定 token 洗成独立段）；② 详情/阅读器加载 editedPath 缓存时也清洗（修复历史脏缓存）
+- 尝试过 token 非锚定匹配分页，引入 1/0 空页回归后回滚（原因未深究，锚定+清洗已够）
+- 注意：模拟器 dump 坐标是**物理像素**（1080 宽），Flutter 逻辑宽 392.7（dpr 2.75）——PAGDBG 类日志里的 width 是逻辑值
+
 ## 七、常用命令
 
 ```powershell

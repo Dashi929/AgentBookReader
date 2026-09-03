@@ -87,5 +87,20 @@
   "copySelected": "复制所选",
   "translateSelected": "翻译所选",
   "noPageText": "（本页没有可选择的文字）",
-  "editCacheSaved": "已保存到编辑缓存，退出时可选另存 / 覆盖"
+  "editCacheSaved": "已保存到编辑缓存，退出时可选另存 / 覆盖",
+  "readingProgress": "阅读进度",
+  "readingSettings": "阅读设置",
+  "search": "搜索",
+  "brightness": "亮度",
+  "lineSpacing": "行距",
+  "paraSpacing": "段距",
+  "pageMargin": "页边距",
+  "jumpToPage": "跳页",
+  "keepAwake": "屏幕常亮",
+  "immersiveMode": "沉浸模式（隐藏状态栏）",
+  "searchHint": "全书搜索关键词…",
+  "noResults": "无结果",
+  "searchIn": "搜索结果",
+  "theme": "主题",
+  "fontSize": "字号"
 }

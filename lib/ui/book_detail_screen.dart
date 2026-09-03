@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 import '../core/controller/plain_text_document.dart';
+import '../core/model/extracted_image.dart' show ensureStandaloneImageLines;
 import '../core/model/char_range.dart' show DocFormat;
 import '../core/parser/cbz_extractor.dart';
 import '../core/parser/docx_extractor.dart';
@@ -30,7 +31,7 @@ class BookDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
-  List<({String title, String? subtitle})> _chapters = const [];
+  List<({String title, String? subtitle, int? sectionIndex, int? page})> _chapters = const [];
   String _preview = '';
   String _content = ''; // 非 PDF：已解码全文，供开始阅读复用
   bool _loading = true;
@@ -57,17 +58,21 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
       // 编辑缓存优先：office/pdf 的文字层可被用户编辑覆盖
       if (entry.editedPath.isNotEmpty &&
           File(entry.editedPath).existsSync()) {
-        final edited = File(entry.editedPath).readAsStringSync();
+        // 清洗：旧编辑缓存里占位符可能不独立成段
+        final edited = ensureStandaloneImageLines(
+            File(entry.editedPath).readAsStringSync());
         _content = edited;
         final doc = await PlainTextDocument.create(
             entry.id, entry.title, DocFormat.md, edited);
-        final chapters = <({String title, String? subtitle})>[];
+        final chapters = <({String title, String? subtitle, int? sectionIndex, int? page})>[];
         for (final sec in doc.document.sections) {
           chapters.add((
             title: sec.title.trim().isEmpty
                 ? '第 ${sec.index + 1} 节'
                 : sec.title.trim(),
             subtitle: '${sec.paragraphs.length} 段',
+            sectionIndex: sec.index,
+            page: null,
           ));
         }
         final previewText = doc.document.sections
@@ -93,7 +98,7 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
       if (ext == 'pdf') {
         final pdf = await PdfDocument.openData(bytes);
         // 章节：书签；无书签则不列（逐页列表意义不大，阅读器内可跳页）
-        final chapters = <({String title, String? subtitle})>[];
+        final chapters = <({String title, String? subtitle, int? sectionIndex, int? page})>[];
         void walk(List<PdfOutlineNode> nodes, int depth) {
           for (final n in nodes) {
             final page = n.dest?.pageNumber;
@@ -101,6 +106,8 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
               chapters.add((
                 title: '  ' * depth + n.title.trim(),
                 subtitle: page == null ? null : '第 $page 页',
+                sectionIndex: null,
+                page: page == null ? null : page - 1,
               ));
             }
             walk(n.children, depth + 1);
@@ -143,13 +150,17 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
       };
       final doc = await PlainTextDocument.create(
           entry.id, entry.title, format, content);
-      final chapters = <({String title, String? subtitle})>[];
+      // xlsx/pptx：节序 == sheet/slide 页序，章节直接跳页；其余文字格式跳节
+      final pageLike = ext == 'xlsx' || ext == 'pptx';
+      final chapters = <({String title, String? subtitle, int? sectionIndex, int? page})>[];
       for (final sec in doc.document.sections) {
         final title = sec.title.trim();
         if (doc.document.sections.length > 1 || title.isNotEmpty) {
           chapters.add((
             title: title.isEmpty ? '第 ${sec.index + 1} 节' : title,
             subtitle: '${sec.paragraphs.length} 段',
+            sectionIndex: pageLike ? null : sec.index,
+            page: pageLike ? sec.index : null,
           ));
         }
       }
@@ -182,6 +193,14 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
   void _startReading() {
     final entry = _entry;
     if (entry == null) return;
+    _startReadingAt();
+  }
+
+  /// 从指定章节开始阅读：page 优先（pdf 页码 / xlsx·pptx 页序），
+  /// 否则用 sectionIndex（文字格式跳到该节起始页）。
+  void _startReadingAt({int? sectionIndex, int? page}) {
+    final entry = _entry;
+    if (entry == null) return;
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => ReaderScreen(
         title: entry.title,
@@ -189,7 +208,8 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
         // PDF 走阅读器的原版渲染模式，initialContent 不使用
         initialContent: _content,
         entryId: entry.id,
-        initialPage: entry.lastPage,
+        initialPage: page ?? entry.lastPage,
+        initialSection: page == null ? sectionIndex : null,
       ),
     ));
   }
@@ -252,8 +272,23 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
                                 ),
                               ]),
                               const SizedBox(height: 4),
-                              Text(
-                                  '${entry.extension.toUpperCase()} · ${entry.lastPage > 0 ? s.page(entry.lastPage + 1) : s.preview}',
+                              Row(children: [
+                                Text('${s.readingProgress}:',
+                                    style: TextStyle(
+                                        fontSize: 14,
+                                        color: theme
+                                            .colorScheme.onSurfaceVariant)),
+                                Text(
+                                    entry.lastPage > 0
+                                        ? s.page(entry.lastPage + 1)
+                                        : '-',
+                                    style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.teal)),
+                              ]),
+                              const SizedBox(height: 4),
+                              Text(entry.extension.toUpperCase(),
                                   style: TextStyle(
                                       fontSize: 13,
                                       color:
@@ -289,6 +324,12 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
                                 fontSize: 13, height: 1.7)),
                       ),
                     ],
+                    const SizedBox(height: 24),
+                    FilledButton.icon(
+                      onPressed: _startReading,
+                      icon: const Icon(Icons.menu_book_outlined),
+                      label: Text(s.startReading),
+                    ),
                     if (_chapters.isNotEmpty) ...[
                       const SizedBox(height: 20),
                       _SectionTitle(s.chapters),
@@ -301,14 +342,13 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
                             subtitle: c.subtitle == null
                                 ? null
                                 : Text(c.subtitle!),
+                            trailing: const Icon(Icons.chevron_right,
+                                size: 18),
+                            onTap: () => _startReadingAt(
+                                sectionIndex: c.sectionIndex,
+                                page: c.page),
                           )),
                     ],
-                    const SizedBox(height: 24),
-                    FilledButton.icon(
-                      onPressed: _startReading,
-                      icon: const Icon(Icons.menu_book_outlined),
-                      label: Text(s.startReading),
-                    ),
                     const SizedBox(height: 32),
                   ],
                 ),

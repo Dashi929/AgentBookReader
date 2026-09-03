@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:path_provider/path_provider.dart';
@@ -17,7 +18,8 @@ import '../core/controller/plain_text_document.dart';
 import '../core/model/annotation.dart';
 import '../core/model/char_range.dart';
 import '../core/model/document.dart';
-import '../core/model/extracted_image.dart';
+import '../core/model/extracted_image.dart'
+    show ensureStandaloneImageLines, imagePlaceholderRegex;
 import '../core/pagination/paginator.dart';
 import '../core/pagination/page_anchor.dart';
 import '../l10n/app_localizations.dart';
@@ -41,6 +43,7 @@ class ReaderScreen extends ConsumerStatefulWidget {
     required this.initialContent,
     this.entryId,
     this.initialPage = 0,
+    this.initialSection,
   });
 
   final String title;
@@ -48,6 +51,9 @@ class ReaderScreen extends ConsumerStatefulWidget {
   final String initialContent;
   final String? entryId;
   final int initialPage;
+
+  /// 从详情页章节进入时：优先跳到该节（文字格式），优先级高于 initialPage
+  final int? initialSection;
 
   @override
   ConsumerState<ReaderScreen> createState() => _ReaderScreenState();
@@ -174,6 +180,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     _pageController =
         PageController(initialPage: widget.format == 'pdf' ? 0 : widget.initialPage);
     _continuousController.addListener(_onContinuousScroll);
+    _applyComfortSettings();
     switch (widget.format) {
       case 'pdf':
         _extractPdf();
@@ -190,6 +197,21 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         _load();
     }
     _applyOrientation();
+  }
+
+  /// 应用常亮/沉浸（进入时按偏好，弹窗切换时实时更新）。
+  void _applyComfortSettings() {
+    final st = ref.read(readerSettingsProvider);
+    if (st.keepAwake) {
+      WakelockPlus.enable();
+    } else {
+      WakelockPlus.disable();
+    }
+    if (st.immersive) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    } else {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
   }
 
   /// ppt/xlsx 单页模式默认横屏；连续模式竖屏（纵向滚动）。
@@ -402,6 +424,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     final m = imagePlaceholderRegex.firstMatch(text.trim());
     if (m == null) return null;
     final info = _imageInfos[m.group(1)!];
+
     if (info == null || info.w <= 0 || info.h <= 0) return null;
     var h = width * info.h / info.w;
     if (h > maxHeight) h = maxHeight;
@@ -564,6 +587,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       future: future,
       builder: (context, snap) {
         if (snap.hasData && snap.data != null) {
+          WidgetsBinding.instance
+              .addPostFrameCallback((_) => _preRenderNeighbors(p));
           return interactive ? imageOf(snap.data!) : plainImage(snap.data!);
         }
         if (snap.connectionState == ConnectionState.done) {
@@ -599,8 +624,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     _pageController.dispose();
     _continuousController.dispose();
     _pdfDoc?.dispose();
-    // 恢复竖屏（横屏仅 ppt/xlsx 单页模式期间生效）
+    // 恢复竖屏（横屏仅 ppt/xlsx 单页模式期间生效）与系统 UI
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    WakelockPlus.disable();
     super.dispose();
   }
 
@@ -616,7 +643,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   void _repaginateIfNeeded(PlainTextDocument doc, double width, double height,
       double fontSize, String modeTag,
       {double? Function(String)? imageLineHeight}) {
-    final key = '$modeTag|$width x $height x $fontSize';
+    final st = ref.read(readerSettingsProvider);
+    final key = '$modeTag|$width x $height x $fontSize x ${st.lineHeight} x ${st.paraSpacing}';
+    // ignore: avoid_print
+    print('PAGDBG width=$width height=$height fontSize=$fontSize margin=${st.margin}');
     if (_paginationKey == key) return;
     _paginationKey = key;
 
@@ -636,6 +666,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             width: width,
             height: height,
             fontSize: fontSize,
+            lineHeight: st.lineHeight,
+            paragraphSpacing: st.paraSpacing,
             imageLineHeight: imageLineHeight));
 
     if (_pages.isEmpty) {
@@ -651,11 +683,30 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       }
       if (target == -1) target = 0;
     } else {
-      target = widget.initialPage.clamp(0, _pages.length - 1);
+      target = -1;
+      if (widget.initialSection != null) {
+        target = _pageForSection(doc, widget.initialSection!);
+      }
+      if (target < 0) {
+        target = widget.initialPage.clamp(0, _pages.length - 1);
+      }
       _jumped = true;
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) => _jumpWhenReady(target));
+  }
+
+  /// 含指定节的第一个分页页码（0 基）；找不到返回 -1。
+  int _pageForSection(PlainTextDocument doc, int sectionIndex) {
+    final sec = doc.sectionAt(sectionIndex);
+    if (sec == null || sec.paragraphs.isEmpty) return -1;
+    final para = sec.paragraphs.first.index;
+    for (var i = 0; i < _pages.length; i++) {
+      for (final line in _pages[i].lines) {
+        if (line.paragraphIndex == para) return i;
+      }
+    }
+    return -1;
   }
 
   void _jumpWhenReady(int target) {
@@ -716,9 +767,11 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     final section = _editSection;
     final controller = _editController;
     if (section == null || controller == null) return;
+    // 图片占位符保护：编辑可能把占位符并进正文段，强制独占一段
+    final newText = ensureStandaloneImageLines(controller.text);
     await doc.applyEdit(DocTextEdit.replace(
       CharRange(section.charOffset, section.charOffset + section.charCount),
-      '${controller.text}\n\n',
+      '$newText\n\n',
     ));
     setState(() {
       _editing = false;
@@ -859,6 +912,284 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         .lines
         .map((l) => l.segments.map((seg) => seg.text).join())
         .join('\n');
+  }
+
+  /// 跳到指定页（单页/连续各自处理）。
+  void _jumpToPage(int idx) {
+    if (idx < 0) return;
+    if (_officeMode && _continuous) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_scrollReady) return;
+        double target;
+        if (_contOffsets.length == _officePageCount + 1) {
+          target = _contOffsets[idx.clamp(0, _officePageCount - 1)];
+        } else {
+          target = idx * _continuousController.position.viewportDimension;
+        }
+        _continuousController.jumpTo(
+            math.min(target, _continuousController.position.maxScrollExtent));
+      });
+    } else {
+      _jumpWhenReady(idx);
+    }
+  }
+
+  /// PDF 相邻页预渲染：当前页完成后预取前后页，翻页即显。
+  void _preRenderNeighbors(int p) {
+    for (final n in [p - 1, p + 1]) {
+      if (n >= 1 &&
+          n <= _pdfPageCount &&
+          !_pdfRendered.containsKey(n) &&
+          !_pdfRendering.contains(n) &&
+          !_pdfFutures.containsKey(n)) {
+        _pdfFutures[n] = _renderPdfPage(n);
+      }
+    }
+  }
+
+  /// 阅读设置弹窗：主题/字号/行距/段距/边距/亮度/跳页/常亮/沉浸。
+  void _showReadingSettingsSheet() {
+    final s = AppLocalizations.of(context)!;
+    var st = ref.read(readerSettingsProvider);
+    final pageCount = _officeMode ? _officePageCount : _pages.length;
+    var jumpValue = _currentPage.clamp(0, math.max(pageCount - 1, 0));
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheet) {
+          st = ref.read(readerSettingsProvider);
+          final theme = ReaderTheme.presets
+              [st.theme.clamp(0, ReaderTheme.presets.length - 1)];
+          Widget label(String t, String v) => Padding(
+              padding: const EdgeInsets.only(top: 10, bottom: 2),
+              child: Row(children: [
+                Text(t,
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: theme.text.withValues(alpha: 0.7))),
+                const Spacer(),
+                Text(v, style: TextStyle(fontSize: 13, color: theme.text)),
+              ]));
+          return Container(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Row(children: [
+                Text(s.readingSettings,
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: theme.text)),
+                const Spacer(),
+                IconButton(
+                    icon: Icon(Icons.close, size: 20, color: theme.text),
+                    onPressed: () => Navigator.pop(context)),
+              ]),
+              Row(children: [
+                Text(s.theme,
+                    style: TextStyle(color: theme.text, fontSize: 14)),
+                const Spacer(),
+                for (var i = 0; i < ReaderTheme.presets.length; i++)
+                  GestureDetector(
+                    onTap: () {
+                      ref.read(readerSettingsProvider.notifier).setTheme(i);
+                      setSheet(() {});
+                    },
+                    child: Container(
+                      margin: const EdgeInsets.only(left: 10),
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                          color: ReaderTheme.presets[i].background,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                              color: st.theme == i
+                                  ? Colors.teal
+                                  : theme.text.withValues(alpha: 0.3),
+                              width: st.theme == i ? 2.5 : 1)),
+                      alignment: Alignment.center,
+                      child: Text(ReaderTheme.presets[i].name,
+                          style: TextStyle(
+                              fontSize: 10,
+                              color: ReaderTheme.presets[i].text)))),
+              ]),
+              label(s.fontSize, st.fontSize.toStringAsFixed(0)),
+              Slider(
+                value: st.fontSize,
+                min: 12,
+                max: 32,
+                divisions: 20,
+                label: st.fontSize.toStringAsFixed(0),
+                onChanged: (v) {
+                  ref.read(readerSettingsProvider.notifier).setFontSize(v);
+                  setSheet(() {});
+                },
+              ),
+              label(s.lineSpacing, st.lineHeight.toStringAsFixed(2)),
+              Slider(
+                value: st.lineHeight,
+                min: 1.0,
+                max: 2.4,
+                divisions: 14,
+                label: st.lineHeight.toStringAsFixed(2),
+                onChanged: (v) {
+                  ref.read(readerSettingsProvider.notifier).setLineHeight(v);
+                  setSheet(() {});
+                },
+              ),
+              label(s.paraSpacing, st.paraSpacing.toStringAsFixed(0)),
+              Slider(
+                value: st.paraSpacing,
+                min: 0,
+                max: 32,
+                divisions: 16,
+                label: st.paraSpacing.toStringAsFixed(0),
+                onChanged: (v) {
+                  ref.read(readerSettingsProvider.notifier).setParaSpacing(v);
+                  setSheet(() {});
+                },
+              ),
+              label(s.pageMargin, st.margin.toStringAsFixed(0)),
+              Slider(
+                value: st.margin,
+                min: 0,
+                max: 64,
+                divisions: 16,
+                label: st.margin.toStringAsFixed(0),
+                onChanged: (v) {
+                  ref.read(readerSettingsProvider.notifier).setMargin(v);
+                  setSheet(() {});
+                },
+              ),
+              label(s.brightness, '${(st.brightness * 100).toStringAsFixed(0)}%'),
+              Slider(
+                value: st.brightness,
+                min: 0.05,
+                max: 1.0,
+                label: '${(st.brightness * 100).toStringAsFixed(0)}%',
+                onChanged: (v) {
+                  ref.read(readerSettingsProvider.notifier).setBrightness(v);
+                  setSheet(() {});
+                },
+              ),
+              if (pageCount > 1) ...[
+                label(s.jumpToPage, '${jumpValue + 1} / $pageCount'),
+                Slider(
+                  value: jumpValue.toDouble(),
+                  min: 0,
+                  max: (pageCount - 1).toDouble(),
+                  divisions: pageCount > 1 ? pageCount - 1 : null,
+                  label: '${jumpValue + 1}',
+                  onChanged: (v) =>
+                      setSheet(() => jumpValue = v.round().clamp(0, pageCount - 1)),
+                  onChangeEnd: (v) => _jumpToPage(v.round()),
+                ),
+              ],
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(s.keepAwake,
+                    style: TextStyle(color: theme.text, fontSize: 14)),
+                value: st.keepAwake,
+                onChanged: (v) {
+                  ref.read(readerSettingsProvider.notifier).setKeepAwake(v);
+                  setSheet(() {});
+                  _applyComfortSettings();
+                },
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(s.immersiveMode,
+                    style: TextStyle(color: theme.text, fontSize: 14)),
+                value: st.immersive,
+                onChanged: (v) {
+                  ref.read(readerSettingsProvider.notifier).setImmersive(v);
+                  setSheet(() {});
+                  _applyComfortSettings();
+                },
+              ),
+            ]),
+          );
+        },
+      ),
+    );
+  }
+
+  /// 全书搜索：文字格式按分页页，office 按文字层页；结果点击跳页。
+  Future<void> _showSearch() async {
+    final s = AppLocalizations.of(context)!;
+    final query = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        final ctrl = TextEditingController();
+        return AlertDialog(
+          title: Text(s.search),
+          content: TextField(
+            autofocus: true,
+            controller: ctrl,
+            decoration: InputDecoration(hintText: s.searchHint),
+            onSubmitted: (v) => Navigator.pop(context, v),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(s.cancel)),
+            FilledButton(
+                onPressed: () => Navigator.pop(context, ctrl.text),
+                child: Text(s.search)),
+          ],
+        );
+      },
+    );
+    if (query == null) return;
+    final q = query.trim();
+    if (q.isEmpty) return;
+    final qLower = q.toLowerCase();
+    final total = _officeMode ? _officePageCount : _pages.length;
+    final results = <(int, String)>[];
+    for (var i = 0; i < total && results.length < 50; i++) {
+      final raw = _officeMode
+          ? (i < _officePageTexts.length ? _officePageTexts[i] : '')
+          : _pageTextAt(i);
+      final pos = raw.toLowerCase().indexOf(qLower);
+      if (pos == -1) continue;
+      final start = (pos - 20).clamp(0, raw.length);
+      final end = (pos + q.length + 30).clamp(0, raw.length);
+      final snippet =
+          raw.substring(start, end).replaceAll('\n', ' ');
+      results.add((i,
+          '${start > 0 ? '…' : ''}$snippet${end < raw.length ? '…' : ''}'));
+    }
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.6,
+          child: results.isEmpty
+              ? Center(child: Text(s.noResults))
+              : ListView.builder(
+                  itemCount: results.length,
+                  itemBuilder: (context, i) {
+                    final (page, snippet) = results[i];
+                    return ListTile(
+                      dense: true,
+                      leading: Text('${page + 1}',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.teal)),
+                      title: Text(snippet,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _jumpToPage(page);
+                      },
+                    );
+                  },
+                ),
+        ),
+      ),
+    );
   }
 
   /// 手势发生时刻的实时页码（避免用滞后/四舍五入到邻页的 _currentPage）。
@@ -1270,7 +1601,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(readerSettingsProvider);
-    final theme = ReaderTheme.presets[settings.theme.clamp(0, 2)];
+    final theme = ReaderTheme
+        .presets[settings.theme.clamp(0, ReaderTheme.presets.length - 1)];
     final s = AppLocalizations.of(context)!;
     final doc = _activeDoc;
     final selecting = _translateMode == _TranslateMode.block && !_officeMode;
@@ -1379,7 +1711,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                             constraints.maxWidth - 32,
                             (constraints.maxHeight - 48) * 0.6));
                     return Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                      padding: EdgeInsets.fromLTRB(settings.margin, 8,
+                          settings.margin, 32),
                       child: PageView.builder(
                         controller: _pageController,
                         itemCount: _pages.length,
@@ -1548,20 +1881,18 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                                   color: theme.text),
                               onPressed: _toggleContinuous,
                             ),
-                          if (!_editing && !_officeMode)
-                            IconButton(
-                            icon: Icon(Icons.text_fields, color: theme.text),
-                            onPressed: () =>
-                                _showFontSheet(context, settings.fontSize),
-                          ),
                           if (!_editing)
                             IconButton(
-                            icon:
-                                Icon(Icons.palette_outlined, color: theme.text),
-                            onPressed: () => ref
-                                .read(readerSettingsProvider.notifier)
-                                .setTheme((settings.theme + 1) % 3),
-                          ),
+                              tooltip: s.search,
+                              icon: Icon(Icons.search, color: theme.text),
+                              onPressed: _showSearch,
+                            ),
+                          if (!_editing)
+                            IconButton(
+                              tooltip: s.readingSettings,
+                              icon: Icon(Icons.tune, color: theme.text),
+                              onPressed: _showReadingSettingsSheet,
+                            ),
                           const SizedBox(width: 8),
                         ]),
                       ),
@@ -1632,19 +1963,15 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                   theme: theme,
                   onClose: () => setState(() => _agentVisible = false),
                 ),
-              if (!_editing)
-                Positioned(
-                right: 16,
-                bottom: 30,
-                child: FloatingActionButton(
-                  heroTag: 'agentFab',
-                  backgroundColor: Colors.teal,
-                  foregroundColor: Colors.white,
-                  onPressed: () =>
-                      setState(() => _agentVisible = !_agentVisible),
-                  child: const Icon(Icons.auto_awesome),
+              // 亮度遮罩：盖在最上层，不拦截触摸
+              if (settings.brightness < 0.999)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Container(
+                        color: Colors.black
+                            .withValues(alpha: 1 - settings.brightness)),
+                  ),
                 ),
-              ),
             ]),
     ),
     );
@@ -1719,7 +2046,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 children: line.segments
                     .map((seg) => TextSpan(text: seg.text))
                     .toList(),
-                style: TextStyle(fontSize: fontSize, color: theme.text),
+                style: TextStyle(
+                    fontSize: fontSize,
+                    color: theme.text,
+                    height: ref.read(readerSettingsProvider).lineHeight),
               ),
             ),
           ),
@@ -1847,34 +2177,6 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 },
               );
             },
-          ),
-        ),
-      ),
-    );
-  }
-  void _showFontSheet(BuildContext context, double current) {
-    final s = AppLocalizations.of(context)!;
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => SafeArea(
-        child: StatefulBuilder(
-          builder: (context, setSheet) => Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Text('${s.reader}  $current'),
-              Slider(
-                value: current,
-                min: 12,
-                max: 32,
-                divisions: 20,
-                label: current.toStringAsFixed(0),
-                // 拖动中只更新预览数值：连续 setFontSize 会触发多次重排，
-                // 每次以"当前页首段"为锚点会造成锚点漂移（bug 修复）。
-                onChanged: (v) => setSheet(() => current = v),
-                onChangeEnd: (v) =>
-                    ref.read(readerSettingsProvider.notifier).setFontSize(v),
-              ),
-            ]),
           ),
         ),
       ),

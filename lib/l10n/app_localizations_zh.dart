@@ -203,6 +203,51 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get editCacheSaved => '已保存到编辑缓存，退出时可选另存 / 覆盖';
+
+  @override
+  String get readingProgress => '阅读进度';
+
+  @override
+  String get readingSettings => '阅读设置';
+
+  @override
+  String get search => '搜索';
+
+  @override
+  String get brightness => '亮度';
+
+  @override
+  String get lineSpacing => '行距';
+
+  @override
+  String get paraSpacing => '段距';
+
+  @override
+  String get pageMargin => '页边距';
+
+  @override
+  String get jumpToPage => '跳页';
+
+  @override
+  String get keepAwake => '屏幕常亮';
+
+  @override
+  String get immersiveMode => '沉浸模式（隐藏状态栏）';
+
+  @override
+  String get searchHint => '全书搜索关键词…';
+
+  @override
+  String get noResults => '无结果';
+
+  @override
+  String get searchIn => '搜索结果';
+
+  @override
+  String get theme => '主题';
+
+  @override
+  String get fontSize => '字号';
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -376,4 +421,49 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get editCacheSaved => '已保存到編輯快取，退出時可選另存 / 覆蓋';
+
+  @override
+  String get readingProgress => '閱讀進度';
+
+  @override
+  String get readingSettings => '閱讀設定';
+
+  @override
+  String get search => '搜尋';
+
+  @override
+  String get brightness => '亮度';
+
+  @override
+  String get lineSpacing => '行距';
+
+  @override
+  String get paraSpacing => '段距';
+
+  @override
+  String get pageMargin => '頁邊距';
+
+  @override
+  String get jumpToPage => '跳頁';
+
+  @override
+  String get keepAwake => '螢幕常亮';
+
+  @override
+  String get immersiveMode => '沉浸模式（隱藏狀態列）';
+
+  @override
+  String get searchHint => '全書搜尋關鍵字…';
+
+  @override
+  String get noResults => '無結果';
+
+  @override
+  String get searchIn => '搜尋結果';
+
+  @override
+  String get theme => '主題';
+
+  @override
+  String get fontSize => '字號';
 }

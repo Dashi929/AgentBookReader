@@ -102,5 +102,20 @@
         "type": "String"
       }
     }
-  }
+  },
+  "readingProgress": "閱讀進度",
+  "readingSettings": "閱讀設定",
+  "search": "搜尋",
+  "brightness": "亮度",
+  "lineSpacing": "行距",
+  "paraSpacing": "段距",
+  "pageMargin": "頁邊距",
+  "jumpToPage": "跳頁",
+  "keepAwake": "螢幕常亮",
+  "immersiveMode": "沉浸模式（隱藏狀態列）",
+  "searchHint": "全書搜尋關鍵字…",
+  "noResults": "無結果",
+  "searchIn": "搜尋結果",
+  "theme": "主題",
+  "fontSize": "字號"
 }

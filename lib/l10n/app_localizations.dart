@@ -460,6 +460,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Saved to edit cache; choose save/overwrite on exit'**
   String get editCacheSaved;
+
+  /// No description provided for @readingProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading progress'**
+  String get readingProgress;
+
+  /// No description provided for @readingSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading settings'**
+  String get readingSettings;
+
+  /// No description provided for @search.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get search;
+
+  /// No description provided for @brightness.
+  ///
+  /// In en, this message translates to:
+  /// **'Brightness'**
+  String get brightness;
+
+  /// No description provided for @lineSpacing.
+  ///
+  /// In en, this message translates to:
+  /// **'Line spacing'**
+  String get lineSpacing;
+
+  /// No description provided for @paraSpacing.
+  ///
+  /// In en, this message translates to:
+  /// **'Paragraph spacing'**
+  String get paraSpacing;
+
+  /// No description provided for @pageMargin.
+  ///
+  /// In en, this message translates to:
+  /// **'Page margin'**
+  String get pageMargin;
+
+  /// No description provided for @jumpToPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Jump to page'**
+  String get jumpToPage;
+
+  /// No description provided for @keepAwake.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep screen on'**
+  String get keepAwake;
+
+  /// No description provided for @immersiveMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Immersive (hide status bar)'**
+  String get immersiveMode;
+
+  /// No description provided for @searchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search in book…'**
+  String get searchHint;
+
+  /// No description provided for @noResults.
+  ///
+  /// In en, this message translates to:
+  /// **'No results'**
+  String get noResults;
+
+  /// No description provided for @searchIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Results'**
+  String get searchIn;
+
+  /// No description provided for @theme.
+  ///
+  /// In en, this message translates to:
+  /// **'Theme'**
+  String get theme;
+
+  /// No description provided for @fontSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Font size'**
+  String get fontSize;
 }
 
 class _AppLocalizationsDelegate
