@@ -65,6 +65,18 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   LibraryNotifier? _libraryNotifier;
   final Map<String, ({String path, int w, int h})> _imageInfos = {};
 
+  // PDF 原版渲染模式：阅读视图逐页显示 pdfium 渲染图（保真，含图示），
+  // _doc 仍持有提取文字（仅供 Agent 工具 / 整页翻译 / 批注）。
+  PdfDocument? _pdfDoc;
+  int _pdfPageCount = 0;
+  List<String> _pdfPageTexts = const [];
+  List<(String, int, int)> _pdfBookmarks = const []; // (标题, 1-based 页码, 层级)
+  final Map<int, ({String path, int w, int h})> _pdfRendered = {};
+  final Set<int> _pdfRendering = {};
+  final Map<int, Future<({String path, int w, int h})?>> _pdfFutures = {};
+
+  bool get _isPdf => widget.format == 'pdf' && _pdfDoc != null;
+
   _TranslateMode _translateMode = _TranslateMode.none;
   int? _selectedParagraph; // 选块模式下被选中的段落
   bool _translating = false;
@@ -82,7 +94,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     super.initState();
     _libraryNotifier = ref.read(libraryProvider.notifier);
     _currentPage = widget.initialPage;
-    _pageController = PageController(initialPage: widget.initialPage);
+    // PDF 页数未知（progress 可能来自旧的文本分页模式），先定位第 0 页，
+    // 提取完成后再跳到 clamp 后的进度页
+    _pageController =
+        PageController(initialPage: widget.format == 'pdf' ? 0 : widget.initialPage);
     if (widget.format == 'pdf') {
       _extractPdf();
     } else {
@@ -133,8 +148,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     if (h < 40) h = 40;
     return h + 8;
   }
-  /// PDF → 文本管道：逐页 loadText 提取文字、书签（大纲）作为章节标题；
-  /// 无文字页（扫描页）整页渲染为图片占位段。完成后走普通文本阅读管线。
+  /// PDF 原版渲染模式：阅读视图逐页 pdfium 渲染（图示/版式保真），
+  /// 同时提取全文文字构建 _doc（仅供 Agent 工具 / 整页翻译 / 批注使用）。
+  /// 页面图片按需渲染并缓存到 `images/<entryId>/pdfpN.png`。
   Future<void> _extractPdf() async {
     setState(() => _pdfLoading = true);
     try {
@@ -156,10 +172,13 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       }
 
       walkOutline(await pdf.loadOutline(), 0);
+      _pdfBookmarks = bookmarks;
+      _pdfPageCount = pdf.pages.length;
+      final support = await getApplicationSupportDirectory();
+      _pdfImageDirPath = '${support.path}/images/${widget.entryId}';
 
+      // 全文文字版 md：只给 Agent/翻译用，不用于阅读显示
       final md = StringBuffer();
-      final manifest = <String, Map<String, dynamic>>{};
-      Directory? imgDir;
       var bookmarkIdx = 0;
       for (var p = 1; p <= pdf.pages.length; p++) {
         while (bookmarkIdx < bookmarks.length &&
@@ -169,75 +188,21 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           md.writeln('${'#' * level} $title');
           bookmarkIdx++;
         }
-        // 无书签的 PDF：每页作为一个章节（标题"第 N 页"）
         if (bookmarks.isEmpty) md.writeln('# 第 $p 页');
-        final page = pdf.pages[p - 1];
-        final rawText = (await page.loadText())?.fullText.trim() ?? '';
-        if (rawText.isNotEmpty) {
-          md.writeln(rawText);
-        } else {
-          // 无文字页（扫描页）：整页渲染为图片
-          final targetW = 1080;
-          final image = await page.render(
-              fullWidth: targetW.toDouble(),
-              fullHeight: targetW * page.height / page.width);
-          if (image != null) {
-            imgDir ??= Directory(
-                    '${(await getApplicationSupportDirectory()).path}/images/${widget.entryId}')
-              ..createSync(recursive: true);
-            final rgba = Uint8List(image.pixels.length);
-            for (var i = 0; i < image.pixels.length; i += 4) {
-              rgba[i] = image.pixels[i + 2];
-              rgba[i + 1] = image.pixels[i + 1];
-              rgba[i + 2] = image.pixels[i];
-              rgba[i + 3] = image.pixels[i + 3];
-            }
-            final buffer = await ui.ImmutableBuffer.fromUint8List(rgba);
-            final descriptor = ui.ImageDescriptor.raw(buffer,
-                width: image.width,
-                height: image.height,
-                pixelFormat: ui.PixelFormat.rgba8888);
-            final codec = await descriptor.instantiateCodec();
-            final frameData = await codec.getNextFrame();
-            final png = await frameData.image
-                .toByteData(format: ui.ImageByteFormat.png);
-            frameData.image.dispose();
-            codec.dispose();
-            descriptor.dispose();
-            buffer.dispose();
-            image.dispose();
-            if (png != null) {
-              final id = 'pdfp$p';
-              final f = File('${imgDir.path}/$id.png');
-              f.writeAsBytesSync(png.buffer
-                  .asUint8List(png.offsetInBytes, png.lengthInBytes));
-              manifest[id] = {
-                'file': '$id.png',
-                'w': image.width,
-                'h': image.height
-              };
-              md.writeln('[[IMG:$id]]');
-            }
-          }
-        }
+        final rawText =
+            (await pdf.pages[p - 1].loadText())?.fullText.trim() ?? '';
+        _pdfPageTexts = [..._pdfPageTexts, rawText];
+        if (rawText.isNotEmpty) md.writeln(rawText);
         md.writeln('');
       }
-      pdf.dispose();
-      if (manifest.isNotEmpty) {
-        final dir = imgDir!;
-        File('${dir.path}/manifest.json')
-            .writeAsStringSync(jsonEncode(manifest));
-        manifest.forEach((id, info) {
-          _imageInfos[id] = (
-            path: '${dir.path}/${info['file']}',
-            w: (info['w'] as num).toInt(),
-            h: (info['h'] as num).toInt(),
-          );
-        });
-      }
+
+      await _loadPdfRenderCache();
+      _pdfDoc = pdf;
       final doc = await PlainTextDocument.create(
           _docId, widget.title, DocFormat.md, md.toString());
+      _currentPage = widget.initialPage.clamp(0, pdf.pages.length - 1);
       if (mounted) setState(() => _doc = doc);
+      _jumpWhenReady(_currentPage);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -248,10 +213,146 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     }
   }
 
+  String? _pdfImageDirPath; // images/<entryId>，_extractPdf 时确定
+  String get _pdfImageDir => _pdfImageDirPath ?? '';
+
+  /// 复用上次打开时已渲染的页面图（manifest.json 中 pdfp* 条目）。
+  Future<void> _loadPdfRenderCache() async {
+    if (widget.entryId == null) return;
+    try {
+      final f = File('$_pdfImageDir/manifest.json');
+      if (!f.existsSync()) return;
+      final raw = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
+      raw.forEach((id, info) {
+        if (!id.startsWith('pdfp')) return;
+        final page = int.tryParse(id.substring(4));
+        final map = info as Map<String, dynamic>;
+        if (page != null && map['file'] != null) {
+          _pdfRendered[page] = (
+            path: '$_pdfImageDir/${map['file']}',
+            w: (map['w'] as num?)?.toInt() ?? 0,
+            h: (map['h'] as num?)?.toInt() ?? 0,
+          );
+        }
+      });
+    } catch (_) {}
+  }
+
+  /// 渲染第 p 页（1-based）并落盘缓存；正在渲染中返回 null。
+  Future<({String path, int w, int h})?> _renderPdfPage(int p) async {
+    final cached = _pdfRendered[p];
+    if (cached != null) return cached;
+    if (_pdfRendering.contains(p) || _pdfDoc == null) return null;
+    _pdfRendering.add(p);
+    try {
+      final page = _pdfDoc!.pages[p - 1];
+      const targetW = 1080;
+      final image = await page.render(
+          fullWidth: targetW.toDouble(),
+          fullHeight: targetW * page.height / page.width);
+      if (image == null) return null;
+      final rgba = Uint8List(image.pixels.length);
+      for (var i = 0; i < image.pixels.length; i += 4) {
+        rgba[i] = image.pixels[i + 2];
+        rgba[i + 1] = image.pixels[i + 1];
+        rgba[i + 2] = image.pixels[i];
+        rgba[i + 3] = image.pixels[i + 3];
+      }
+      final buffer = await ui.ImmutableBuffer.fromUint8List(rgba);
+      final descriptor = ui.ImageDescriptor.raw(buffer,
+          width: image.width,
+          height: image.height,
+          pixelFormat: ui.PixelFormat.rgba8888);
+      final codec = await descriptor.instantiateCodec();
+      final frameData = await codec.getNextFrame();
+      final png =
+          await frameData.image.toByteData(format: ui.ImageByteFormat.png);
+      frameData.image.dispose();
+      codec.dispose();
+      descriptor.dispose();
+      buffer.dispose();
+      final w = image.width, h = image.height;
+      image.dispose();
+      if (png == null) return null;
+      Directory(_pdfImageDir).createSync(recursive: true);
+      final f = File('$_pdfImageDir/pdfp$p.png');
+      f.writeAsBytesSync(
+          png.buffer.asUint8List(png.offsetInBytes, png.lengthInBytes));
+      final result = (path: f.path, w: w, h: h);
+      if (mounted) setState(() => _pdfRendered[p] = result);
+      _savePdfRenderManifest(p, result);
+      return result;
+    } catch (_) {
+      return null;
+    } finally {
+      _pdfRendering.remove(p);
+    }
+  }
+
+  /// 渲染结果合并进 manifest.json（与 docx/epub 图片清单同目录同格式）。
+  void _savePdfRenderManifest(int p, ({String path, int w, int h}) info) {
+    try {
+      final f = File('$_pdfImageDir/manifest.json');
+      final raw = f.existsSync()
+          ? jsonDecode(f.readAsStringSync()) as Map<String, dynamic>
+          : <String, dynamic>{};
+      raw['pdfp$p'] = {
+        'file': 'pdfp$p.png',
+        'w': info.w,
+        'h': info.h,
+      };
+      f.writeAsStringSync(jsonEncode(raw));
+    } catch (_) {}
+  }
+
+  /// 阅读视图渲染第 p 页（1-based）：优先用缓存，否则按需渲染。
+  Widget _buildPdfPage(int p, ReaderTheme theme) {
+    Widget imageOf(({String path, int w, int h}) info) => InteractiveViewer(
+          maxScale: 5.0,
+          child: Center(
+            child: Image.file(File(info.path), fit: BoxFit.contain),
+          ),
+        );
+    final info = _pdfRendered[p];
+    if (info != null) return imageOf(info);
+    final future =
+        _pdfFutures.putIfAbsent(p, () => _renderPdfPage(p));
+    return FutureBuilder<({String path, int w, int h})?>(
+      future: future,
+      builder: (context, snap) {
+        if (snap.hasData && snap.data != null) return imageOf(snap.data!);
+        if (snap.connectionState == ConnectionState.done) {
+          // 渲染失败：重试
+          return Center(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.error_outline),
+              Text('第 $p 页渲染失败',
+                  style: TextStyle(color: theme.text, fontSize: 14)),
+              TextButton(
+                  onPressed: () {
+                    setState(() => _pdfFutures.remove(p));
+                  },
+                  child: const Text('重试')),
+            ]),
+          );
+        }
+        return Center(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 8),
+            Text('正在渲染第 $p 页…',
+                style: TextStyle(color: theme.text, fontSize: 14)),
+          ]),
+        );
+      },
+    );
+  }
+
   @override
   void dispose() {
     _saveProgress();
     _pageController.dispose();
+    _pdfDoc?.dispose();
     super.dispose();
   }
 
@@ -538,6 +639,19 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     PrefsService.instance.saveTargetLang(langCode);
     final langName = targetLangName(langCode);
 
+    // PDF 原版渲染模式：无选块（显示的是页面图），整页翻译用提取文字
+    if (_isPdf) {
+      final text = (_currentPage >= 0 && _currentPage < _pdfPageTexts.length
+              ? _pdfPageTexts[_currentPage]
+              : '')
+          .trim();
+      if (text.isEmpty) return;
+      await _translateAndShow(text,
+          title: '整页 · 第${_currentPage + 1}页 · $langName',
+          targetLang: langCode);
+      return;
+    }
+
     final choice = await showDialog<String>(
       context: context,
       builder: (context) => SimpleDialog(
@@ -672,7 +786,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     final theme = ReaderTheme.presets[settings.theme.clamp(0, 2)];
     final s = AppLocalizations.of(context)!;
     final doc = _activeDoc;
-    final selecting = _translateMode == _TranslateMode.block;
+    final selecting = _translateMode == _TranslateMode.block && !_isPdf;
+    final isPdf = _isPdf;
+    final pageCount = isPdf ? _pdfPageCount : _pages.length;
     return Scaffold(
       backgroundColor: theme.background,
       body: doc == null
@@ -704,7 +820,19 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                             setState(() => _chromeVisible = !_chromeVisible);
                           }
                         },
-                  child: LayoutBuilder(builder: (context, constraints) {
+                  child: isPdf
+                      ? PageView.builder(
+                          controller: _pageController,
+                          itemCount: _pdfPageCount,
+                          onPageChanged: (page) {
+                            _currentPage = page;
+                            setState(() {});
+                            _saveProgress();
+                          },
+                          itemBuilder: (context, i) =>
+                              _buildPdfPage(i + 1, theme),
+                        )
+                      : LayoutBuilder(builder: (context, constraints) {
                     _repaginateIfNeeded(
                         doc,
                         constraints.maxWidth - 32,
@@ -741,7 +869,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 child: IgnorePointer(
                   child: Center(
                     child: Text(
-                      '${_currentPage + 1} / ${_pages.length}',
+                      '${_currentPage + 1} / $pageCount',
                       style: TextStyle(
                           color: theme.text.withValues(alpha: 0.45),
                           fontSize: 12),
@@ -814,7 +942,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                               icon: Icon(Icons.close, color: theme.text),
                               onPressed: _cancelEditing,
                             ),
-                          ] else
+                          ] else if (!isPdf)
                             IconButton(
                               tooltip: '编辑本节',
                               icon:
@@ -822,11 +950,13 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                               onPressed: () => _startEditing(doc),
                             ),
                           if (!_editing &&
-                              doc.document.sections.length > 1)
+                              (isPdf || doc.document.sections.length > 1))
                             IconButton(
                               tooltip: s.chapters,
                               icon: Icon(Icons.menu_book, color: theme.text),
-                              onPressed: _showSectionList,
+                              onPressed: isPdf
+                                  ? _showPdfChapterList
+                                  : _showSectionList,
                             ),
                           if (!_editing)
                             IconButton(
@@ -857,7 +987,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                             onPressed: () =>
                                 setState(() => _agentVisible = !_agentVisible),
                           ),
-                          if (!_editing)
+                          if (!_editing && !isPdf)
                             IconButton(
                             icon: Icon(Icons.text_fields, color: theme.text),
                             onPressed: () =>
@@ -1034,6 +1164,44 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: children,
+      ),
+    );
+  }
+
+  /// PDF 目录：书签列表（无书签则逐页列表），点击跳转对应页。
+  void _showPdfChapterList() {
+    final items = _pdfBookmarks.isNotEmpty
+        ? _pdfBookmarks
+            .map((b) => (title: b.$1, page: b.$2, depth: b.$3))
+            .toList()
+        : [
+            for (var p = 1; p <= _pdfPageCount; p++)
+              (title: '第 $p 页', page: p, depth: 0)
+          ];
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.6,
+          child: ListView.builder(
+            itemCount: items.length,
+            itemBuilder: (context, i) {
+              final it = items[i];
+              return ListTile(
+                dense: true,
+                contentPadding:
+                    EdgeInsets.only(left: 16.0 + it.depth * 16.0, right: 16),
+                title: Text(it.title,
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                subtitle: Text('第 ${it.page} 页'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _jumpWhenReady((it.page - 1).clamp(0, _pdfPageCount - 1));
+                },
+              );
+            },
+          ),
+        ),
       ),
     );
   }

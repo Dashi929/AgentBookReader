@@ -177,3 +177,18 @@ flutter gen-l10n                  # ARB 改后必须跑（或 flutter run 自动
 - 内嵌图片验证：docx/epub 各含 400x150 蓝色 PNG → 导入后截图像素统计蓝色块 23064 px（y 800-1168）✓；提取→落盘→manifest→分页→渲染全链路通
 - 新增测试：page_anchor_test 4 个（字符级锚定回归）；46 个测试全绿
 - 调试教训：PowerShell here-string 拼 patch 时行首 `+` 会被写进文件（两次事故）；PS 双引号会插值 `${var}`/`$p`——拼 Dart 代码一律用单引号 here-string；ReadAllText 后统一换行符再 Replace（混用 CRLF/LF 导致 Contains 失败）
+
+## 十一、第四轮变更（2026-09-03）：真机导入修复 + PDF 原版渲染模式
+
+### 导入修复（真机"没有权限"）
+- **选择器不再按扩展名过滤**：XTypeGroup 传扩展名会被 file_selector_android 映射成 MIME 塞进 SAF EXTRA_MIME_TYPES，真机 ROM 实现不一致会导致文件全部置灰/报权限错；改为选择器全放行、应用内按扩展名校验并提示
+- **导入即复制进应用私有目录**：`imported/<entryId>.<ext>`，DB 存该永久路径（file_selector 在 Android 返回 SAF 临时缓存路径，系统清缓存后重开/写回/PDF 渲染都会失败）
+- **错误全部可见**：openFiles 异常捕获 + 单文件失败收集后 SnackBar 显示具体原因（原先 catch (_) 静默吞，表现为"没反应"）
+- 旧书籍记录存的还是缓存路径，打不开需删掉重导
+
+### PDF 原版渲染模式（用户反馈"图示全变文字"后重做）
+- **阅读视图逐页 pdfium 渲染成图片**（InteractiveViewer 支持缩放），图示/版式 100% 保真；按需渲染+落盘缓存 `images/<entryId>/pdfpN.png`（manifest.json 复用），二次打开免渲染
+- **文字提取仍保留**：全文构建 _doc 供 Agent 工具/批注/**整页翻译**用；显示与文字分离
+- PDF 模式隐藏编辑/字号按钮；目录=书签跳页（无书签逐页列表）；翻译菜单只保留整页（选块需文本段落）；进度按 PDF 页码
+- **旧 PDF 记录是文字模式入库，需删掉重新导入**才走渲染模式
+- 教训：pdfrx `PdfImage` dispose 后 width/height 不可再用；path_provider 无同步目录 API

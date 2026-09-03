@@ -25,19 +25,38 @@ class LibraryPage extends ConsumerWidget {
 
   Future<void> _import(BuildContext context, WidgetRef ref) async {
     final s = AppLocalizations.of(context)!;
-    const typeGroup = XTypeGroup(
-      label: 'documents',
-      extensions: ['txt', 'md', 'json', 'docx', 'epub', 'pdf'],
-    );
-    final files = await openFiles(acceptedTypeGroups: [typeGroup]);
+    // 不按扩展名过滤选择器：真机 ROM 的 SAF 对 MIME/扩展名映射不一致，
+    // 过滤后目标文件可能全部置灰或直接报权限错误；改为应用内按扩展名校验。
+    const typeGroup = XTypeGroup(label: 'documents');
+    List<XFile> files;
+    try {
+      files = await openFiles(acceptedTypeGroups: [typeGroup]);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(s.importFailed(e.toString()))));
+      }
+      return;
+    }
     if (files.isEmpty) return;
 
     final opened = <({String title, String format, String content, String entryId})>[];
+    final errors = <String>[];
     for (final file in files) {
       final ext = file.name.split('.').last.toLowerCase();
-      if (!_allowedExt.contains(ext)) continue;
+      if (!_allowedExt.contains(ext)) {
+        errors.add('${file.name}: unsupported type');
+        continue;
+      }
       try {
         final entryId = '${DateTime.now().microsecondsSinceEpoch}_${file.name}';
+        final rawBytes = await file.readAsBytes();
+        // 复制进应用私有目录并存该路径：file_selector 在 Android 返回的是
+        // SAF 临时缓存路径，系统清理缓存后重开/写回会失败。
+        final supportDir = await getApplicationSupportDirectory();
+        final persisted = File('${supportDir.path}/imported/$entryId.$ext');
+        await persisted.create(recursive: true);
+        await persisted.writeAsBytes(rawBytes, flush: true);
         // pdf：不经文本管道，阅读器用 pdfium 渲染页面；
         // docx/epub：提取为 Markdown（标题→#）+ 内嵌图片占位段
         String format;
@@ -47,25 +66,23 @@ class LibraryPage extends ConsumerWidget {
           format = 'pdf';
           content = '';
         } else if (ext == 'docx') {
-          final r = DocxExtractor.extractAsMarkdownWithImages(
-              await file.readAsBytes());
+          final r = DocxExtractor.extractAsMarkdownWithImages(rawBytes);
           format = 'md';
           content = r.markdown;
           extractedImages = r.images;
         } else if (ext == 'epub') {
-          final r = EpubExtractor.extractAsMarkdownWithImages(
-              await file.readAsBytes());
+          final r = EpubExtractor.extractAsMarkdownWithImages(rawBytes);
           format = 'md';
           content = r.markdown;
           extractedImages = r.images;
         } else {
           format = ext;
-          content = TextDecoder.decode(await file.readAsBytes());
+          content = TextDecoder.decode(rawBytes);
         }
         final entry = BookEntry(
           id: entryId,
           title: file.name,
-          path: file.path,
+          path: persisted.path,
           extension: ext,
         );
         if (extractedImages.isNotEmpty) {
@@ -78,16 +95,22 @@ class LibraryPage extends ConsumerWidget {
           content: content,
           entryId: entry.id,
         ));
-      } catch (_) {
-        // 单个文件失败不阻断批量导入
+      } catch (e) {
+        // 单个文件失败不阻断批量导入，但错误要可见（否则表现为"没反应"）
+        errors.add('${file.name}: $e');
       }
     }
 
     if (context.mounted) {
       if (opened.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(s.importFailed('no valid files'))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+                s.importFailed(errors.isEmpty ? 'no valid files' : errors.join('; ')))));
         return;
+      }
+      if (errors.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(s.importFailed(errors.join('; ')))));
       }
       final first = opened.first;
       Navigator.of(context).push(MaterialPageRoute(
