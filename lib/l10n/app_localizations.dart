@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/intl.dart' as intl;
 
 import 'app_localizations_en.dart';
+import 'app_localizations_ja.dart';
 import 'app_localizations_zh.dart';
 
 // ignore_for_file: type=lint
@@ -95,7 +96,9 @@ abstract class AppLocalizations {
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
     Locale('en'),
+    Locale('ja'),
     Locale('zh'),
+    Locale('zh', 'TW'),
   ];
 
   /// No description provided for @appTitle.
@@ -349,6 +352,114 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Continue reading: {page}'**
   String continueReading(String page);
+
+  /// No description provided for @language.
+  ///
+  /// In en, this message translates to:
+  /// **'Language'**
+  String get language;
+
+  /// No description provided for @followSystem.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow system'**
+  String get followSystem;
+
+  /// No description provided for @editTextLayer.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit text layer'**
+  String get editTextLayer;
+
+  /// No description provided for @selectText.
+  ///
+  /// In en, this message translates to:
+  /// **'Select text'**
+  String get selectText;
+
+  /// No description provided for @continuousMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Continuous'**
+  String get continuousMode;
+
+  /// No description provided for @singlePageMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Single page'**
+  String get singlePageMode;
+
+  /// No description provided for @saveAs.
+  ///
+  /// In en, this message translates to:
+  /// **'Save as'**
+  String get saveAs;
+
+  /// No description provided for @overwrite.
+  ///
+  /// In en, this message translates to:
+  /// **'Overwrite'**
+  String get overwrite;
+
+  /// No description provided for @discardChanges.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard changes'**
+  String get discardChanges;
+
+  /// No description provided for @continueEditing.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep editing'**
+  String get continueEditing;
+
+  /// No description provided for @unsavedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Unsaved changes'**
+  String get unsavedTitle;
+
+  /// No description provided for @exitSaveOffice.
+  ///
+  /// In en, this message translates to:
+  /// **'Edits apply to the text layer (Agent/translate/details).\nOverwrite = save to in-app cache permanently; Save as = export a Markdown file.'**
+  String get exitSaveOffice;
+
+  /// No description provided for @exitSaveText.
+  ///
+  /// In en, this message translates to:
+  /// **'Overwrite = write back to the original file (a .bak backup is made); Save as = export a new file.'**
+  String get exitSaveText;
+
+  /// No description provided for @pageTextTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Page text (long-press to select)'**
+  String get pageTextTitle;
+
+  /// No description provided for @copySelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy selection'**
+  String get copySelected;
+
+  /// No description provided for @translateSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Translate selection'**
+  String get translateSelected;
+
+  /// No description provided for @noPageText.
+  ///
+  /// In en, this message translates to:
+  /// **'(No selectable text on this page)'**
+  String get noPageText;
+
+  /// No description provided for @editCacheSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved to edit cache; choose save/overwrite on exit'**
+  String get editCacheSaved;
 }
 
 class _AppLocalizationsDelegate
@@ -362,17 +473,31 @@ class _AppLocalizationsDelegate
 
   @override
   bool isSupported(Locale locale) =>
-      <String>['en', 'zh'].contains(locale.languageCode);
+      <String>['en', 'ja', 'zh'].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
 }
 
 AppLocalizations lookupAppLocalizations(Locale locale) {
+  // Lookup logic when language+country codes are specified.
+  switch (locale.languageCode) {
+    case 'zh':
+      {
+        switch (locale.countryCode) {
+          case 'TW':
+            return AppLocalizationsZhTw();
+        }
+        break;
+      }
+  }
+
   // Lookup logic when only language code is specified.
   switch (locale.languageCode) {
     case 'en':
       return AppLocalizationsEn();
+    case 'ja':
+      return AppLocalizationsJa();
     case 'zh':
       return AppLocalizationsZh();
   }

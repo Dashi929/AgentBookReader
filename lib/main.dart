@@ -17,12 +17,13 @@ Future<void> main() async {
   ));
 }
 
-class AgentBookReaderApp extends StatelessWidget {
+class AgentBookReaderApp extends ConsumerWidget {
   const AgentBookReaderApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp(
+      locale: resolveAppLocale(ref.watch(appLocaleProvider)),
       onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,

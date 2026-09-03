@@ -171,6 +171,31 @@ lib/
 - 整篇任务：`WholeDocTranslationTask.run` 改为按节并发（concurrency=3），取消检查紧贴 translate 调用（保持旧"取消后不再发起新翻译"语义）；结果按 (docIdx,sectionIndex) 对齐拼装（曾用任务扁平序号 vs 文档序号比较导致多节文档丢节——单测覆盖）
 - 流式输出（SSE）未做：感知优化，后续候选
 
+### 编辑/选字/缩放（2026-09-03 第二批）
+- **就地编辑重做**：编辑层去边框/同背景/同字号/同页边距，观感=原页面文字直接可编辑
+- **编辑待存流程**：Confirm 只改内存文档（_pendingEdits=true），退出时 PopScope 拦截弹对话框（继续编辑/放弃修改/另存为/覆盖）；txt/md/json 覆盖=写回原文件(.bak)，pdf/xlsx/pptx 覆盖=写 `edited/<docIdHash>.md` 应用内缓存 + DB `editedPath`（schemaVersion 3 迁移），详情/重开优先用编辑缓存
+- **长按选字面板**：所有格式长按阅读区 → 本页文字 SelectableText + 复制所选/翻译所选；office 格式统一取 `_officePageTexts`（**PDF 也要填充它，曾漏掉导致长按/整页翻译拿不到文字**）
+- **双指缩放**：单页模式文字页/pptx/xlsx 包 InteractiveViewer（pdf/comic 原本就有）；xlsx 单页去内层滚动（verticalScroll:false + hScroll:false），平移交给 IV
+- 坑：uiautomator dump 坐标=真实分辨率，截图是缩放显示的——点按钮必须用 dump 坐标
+
+### 用户反馈修正（2026-09-03 第三批）
+- **批注 UI 移除**：顶栏批注按钮+_showAnnotations 删除（Agent 的 add_annotation 仍写 DB，只是无查看入口）
+- **连续模式整体缩放**：逐页 IV 改为 Listener+Transform 手动双指手势包整个 ListView——IV 的 pan recognizer 会抢走单指滚动（List 无法滚动）；Listener 不进 gesture arena，单指滚动/点击不受影响。zoom 1~4 倍+双指平移（钳制 ±(zoom-1)*600）
+- **选择文字入口**：顶栏"选择文字"按钮（所有格式）+ 长按阅读区双入口；面板内 SelectableText 的文字 uiautomator dump 读不到（语义树限制），验证用截图像素统计（面板底色 239,245,242 大面积出现即成功）
+- PDF 整页翻译/长按取文字走 _officePageTexts——_extractPdf 必须填充它（曾漏→PDF 翻译/长按空文字）
+
+### 应用语言设置（2026-09-03）
+- 设置页 Language 下拉：跟随系统 / English / 简体中文 / 繁體中文 / 日本語（Prefs 'appLocale'，appLocaleProvider → MaterialApp.locale）
+- 四语言 ARB：en(模板)/zh/zh_TW/ja；新键含阅读器 chrome/退出对话框/选择面板/语言
+- **大量次级文案仍是硬编码中文**（snackbar、翻译菜单、工作台等）——切非中文语言时它们不变；新增界面务必用 AppLocalizations
+- gen-l10n 扫描 arb-dir 全部 app_*.arb 自动生成 supportedLocales；非模板 ARB 的占位符键需带 @metadata（从模板复制）
+
+### 用户反馈修正（2026-09-03 第四批）
+- **长按串页修复**：_showTextSelectionSheet 改用 `_livePageIndex()`（手势时刻从 controller.page/连续偏移二分实时取页），不再用可能滞后的 _currentPage
+- **选择文字按钮移除**（用户要求只留长按入口）
+- **缩放重构**：单页模式逐页 InteractiveViewer 在 PageView 内会与横滑手势竞争（缩放经常被翻页抢走）→ 改为自研 `_PinchZoom`（Listener 手动跟踪双指，不进 gesture arena）：单指翻页/点击翻页/双指缩放(1~5x)+双指拖动平移，key=页号实现翻页重置；连续模式为整体缩放（Listener+Transform 包整个 ListView，单指滚动不受影响）
+- pdf/comic/pptx/xlsx/text 单页统一包 _PinchZoom；xlsx 保留内部纵向/横向滚动（scale=1 时可达边缘，放大后双指拖动）
+
 ## 七、常用命令
 
 ```powershell

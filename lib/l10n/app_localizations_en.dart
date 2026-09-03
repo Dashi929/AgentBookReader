@@ -150,4 +150,61 @@ class AppLocalizationsEn extends AppLocalizations {
   String continueReading(String page) {
     return 'Continue reading: $page';
   }
+
+  @override
+  String get language => 'Language';
+
+  @override
+  String get followSystem => 'Follow system';
+
+  @override
+  String get editTextLayer => 'Edit text layer';
+
+  @override
+  String get selectText => 'Select text';
+
+  @override
+  String get continuousMode => 'Continuous';
+
+  @override
+  String get singlePageMode => 'Single page';
+
+  @override
+  String get saveAs => 'Save as';
+
+  @override
+  String get overwrite => 'Overwrite';
+
+  @override
+  String get discardChanges => 'Discard changes';
+
+  @override
+  String get continueEditing => 'Keep editing';
+
+  @override
+  String get unsavedTitle => 'Unsaved changes';
+
+  @override
+  String get exitSaveOffice =>
+      'Edits apply to the text layer (Agent/translate/details).\nOverwrite = save to in-app cache permanently; Save as = export a Markdown file.';
+
+  @override
+  String get exitSaveText =>
+      'Overwrite = write back to the original file (a .bak backup is made); Save as = export a new file.';
+
+  @override
+  String get pageTextTitle => 'Page text (long-press to select)';
+
+  @override
+  String get copySelected => 'Copy selection';
+
+  @override
+  String get translateSelected => 'Translate selection';
+
+  @override
+  String get noPageText => '(No selectable text on this page)';
+
+  @override
+  String get editCacheSaved =>
+      'Saved to edit cache; choose save/overwrite on exit';
 }

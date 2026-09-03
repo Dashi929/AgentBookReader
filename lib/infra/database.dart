@@ -12,6 +12,7 @@ class Documents extends Table {
   TextColumn get author => text().withDefault(const Constant(''))();
   TextColumn get synopsis => text().withDefault(const Constant(''))();
   TextColumn get coverPath => text().withDefault(const Constant(''))();
+  TextColumn get editedPath => text().withDefault(const Constant(''))();
   IntColumn get lastPage => integer().withDefault(const Constant(0))();
   DateTimeColumn get importedAt => dateTime()();
 
@@ -78,7 +79,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(onUpgrade: (m, from, to) async {
@@ -86,6 +87,9 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(documents, documents.author);
           await m.addColumn(documents, documents.synopsis);
           await m.addColumn(documents, documents.coverPath);
+        }
+        if (from < 3) {
+          await m.addColumn(documents, documents.editedPath);
         }
       });
 

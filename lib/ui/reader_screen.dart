@@ -20,7 +20,6 @@ import '../core/model/document.dart';
 import '../core/model/extracted_image.dart';
 import '../core/pagination/paginator.dart';
 import '../core/pagination/page_anchor.dart';
-import '../infra/agent_repository.dart';
 import '../l10n/app_localizations.dart';
 import '../state/app_state.dart';
 import 'agent_panel.dart';
@@ -88,7 +87,48 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   List<({String path, int w, int h})> _comicPages = const [];
   List<String> _officePageTexts = const []; // 每页文本（整页翻译用）
 
+  bool _pendingEdits = false; // 已确认的编辑（退出时询问另存/覆盖/放弃）
+  TextSelection? _sheetSelection; // 文字选择面板中的当前选区
   bool _continuous = PrefsService.instance.loadReaderContinuous();
+  // 连续模式整体双指缩放（Listener 手势不进 arena，不影响单指滚动/点击）
+  final Map<int, Offset> _pinchPtrs = {};
+  double _pinchPrevDist = 0;
+  Offset _pinchPrevMid = Offset.zero;
+  double _contZoom = 1.0;
+  Offset _contPan = Offset.zero;
+
+  void _onPinchDown(PointerEvent e) {
+    _pinchPtrs[e.pointer] = e.position;
+    if (_pinchPtrs.length == 2) {
+      final v = _pinchPtrs.values.toList();
+      _pinchPrevDist = (v[0] - v[1]).distance;
+      _pinchPrevMid = (v[0] + v[1]) / 2;
+    }
+  }
+
+  void _onPinchMove(PointerEvent e) {
+    if (!_pinchPtrs.containsKey(e.pointer)) return;
+    _pinchPtrs[e.pointer] = e.position;
+    if (_pinchPtrs.length != 2) return;
+    final v = _pinchPtrs.values.toList();
+    final d = (v[0] - v[1]).distance;
+    final mid = (v[0] + v[1]) / 2;
+    if (_pinchPrevDist > 0) {
+      _contZoom = (_contZoom * d / _pinchPrevDist).clamp(1.0, 4.0);
+      final maxPan = (_contZoom - 1) * 600.0;
+      _contPan = Offset(
+          (_contPan.dx + mid.dx - _pinchPrevMid.dx).clamp(-maxPan, maxPan),
+          (_contPan.dy + mid.dy - _pinchPrevMid.dy).clamp(-maxPan, maxPan));
+      if (mounted) setState(() {});
+    }
+    _pinchPrevDist = d;
+    _pinchPrevMid = mid;
+  }
+
+  void _onPinchUp(PointerEvent e) {
+    _pinchPtrs.remove(e.pointer);
+    _pinchPrevDist = 0;
+  }
   List<double> _contOffsets = const [0.0];
   final ScrollController _continuousController = ScrollController();
 
@@ -415,6 +455,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         if (rawText.isNotEmpty) md.writeln(rawText);
         md.writeln('');
       }
+      // 长按选择面板 / 整页翻译共用（office 模式统一取文字层）
+      _officePageTexts = _pdfPageTexts;
 
       await _loadPdfRenderCache();
       _pdfDoc = pdf;
@@ -502,21 +544,28 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }
 
   /// 阅读视图渲染第 p 页（1-based）：优先用缓存，否则按需渲染。
-  Widget _buildPdfPage(int p, ReaderTheme theme) {
+  /// 缩放统一由外层 _PinchZoom（单页）/ Transform（连续）处理，页面不再自带 IV。
+  Widget _buildPdfPage(int p, ReaderTheme theme, {bool interactive = false}) {
     Widget imageOf(({String path, int w, int h}) info) => InteractiveViewer(
           maxScale: 5.0,
           child: Center(
             child: Image.file(File(info.path), fit: BoxFit.contain),
           ),
         );
+    Widget plainImage(({String path, int w, int h}) info) => Center(
+          child: Image.file(File(info.path),
+              fit: BoxFit.fill, width: double.infinity),
+        );
     final info = _pdfRendered[p];
-    if (info != null) return imageOf(info);
+    if (info != null) return interactive ? imageOf(info) : plainImage(info);
     final future =
         _pdfFutures.putIfAbsent(p, () => _renderPdfPage(p));
     return FutureBuilder<({String path, int w, int h})?>(
       future: future,
       builder: (context, snap) {
-        if (snap.hasData && snap.data != null) return imageOf(snap.data!);
+        if (snap.hasData && snap.data != null) {
+          return interactive ? imageOf(snap.data!) : plainImage(snap.data!);
+        }
         if (snap.connectionState == ConnectionState.done) {
           // 渲染失败：重试
           return Center(
@@ -661,6 +710,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     });
   }
 
+  /// 确认编辑：只改动内存文档（文字层），退出阅读器时统一询问保存方式。
   Future<void> _applyEditing(PlainTextDocument doc) async {
     final s = AppLocalizations.of(context)!;
     final section = _editSection;
@@ -670,50 +720,258 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       CharRange(section.charOffset, section.charOffset + section.charCount),
       '${controller.text}\n\n',
     ));
-
-    String? note;
-    if (widget.entryId != null && _writebackSupported) {
-      final path =
-          ref.read(libraryProvider.notifier).byId(widget.entryId!)?.path;
-      if (path != null) {
-        try {
-          // 写回原文件前先备份 .bak
-          final bytes = await XFile(path).readAsBytes();
-          await XFile.fromData(bytes).saveTo('$path.bak');
-          final out = widget.format == 'json'
-              ? jsonEncode(doc.document.sections
-                  .map((sec) => {
-                        'index': sec.index,
-                        'title': sec.title,
-                        'text': sec.plainText,
-                      })
-                  .toList())
-              : doc.rawText;
-          await XFile.fromData(utf8.encode(out)).saveTo(path);
-          note = '（原文件已备份并更新）';
-        } catch (e) {
-          note = null;
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('写回原文件失败：$e（编辑已保存）')));
-          }
-        }
-      }
-    }
-    if (note == null && !_writebackSupported) {
-      note = '（该格式编辑仅保存在应用内，可导出）';
-    }
     setState(() {
       _editing = false;
       _editController?.dispose();
       _editController = null;
       _editSection = null;
-      _paginationKey = null; // 内容已变，强制按新文本重排
+      _pendingEdits = true; // 有未落盘的修改
+      _paginationKey = null;
     });
-    if (mounted && note != null) {
+    if (mounted) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('${s.confirm}$note')));
+          .showSnackBar(SnackBar(content: Text(s.editCacheSaved)));
     }
+  }
+
+  /// 退出前的保存询问：另存 / 覆盖 / 放弃修改 / 继续编辑。
+  Future<void> _exitWithSaveDialog() async {
+    final s = AppLocalizations.of(context)!;
+    final choice = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Text(s.unsavedTitle),
+        content: Text(_isPdf || _isXlsx || _isPptx
+            ? s.exitSaveOffice
+            : s.exitSaveText),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, 'continue'),
+              child: Text(s.continueEditing)),
+          TextButton(
+              onPressed: () => Navigator.pop(context, 'discard'),
+              child: Text(s.discardChanges)),
+          TextButton(
+              onPressed: () => Navigator.pop(context, 'export'),
+              child: Text(s.saveAs)),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, 'overwrite'),
+              child: Text(s.overwrite)),
+        ],
+      ),
+    );
+    if (choice == 'continue' || choice == null) return;
+    if (choice == 'discard') {
+      _pendingEdits = false;
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
+    if (choice == 'export') {
+      final doc = _doc;
+      if (doc != null) {
+        await _exportOrSaveDoc(doc, exportAs: true);
+      }
+      _pendingEdits = false;
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
+    // 覆盖
+    final doc = _doc;
+    if (doc != null && await _overwriteDoc(doc)) {
+      _pendingEdits = false;
+      if (mounted) Navigator.of(context).pop();
+    }
+  }
+
+  /// 覆盖：txt/md/json 写回原文件(.bak)；office/pdf 存应用内编辑缓存。
+  /// 返回是否成功（失败留在当前页让用户另存）。
+  Future<bool> _overwriteDoc(PlainTextDocument doc) async {
+    final out = widget.format == 'json'
+        ? jsonEncode(doc.document.sections
+            .map((sec) => {
+                  'index': sec.index,
+                  'title': sec.title,
+                  'text': sec.plainText,
+                })
+            .toList())
+        : doc.rawText;
+
+    // office/pdf：应用内编辑缓存，之后打开优先使用
+    if (!_writebackSupported) {
+      try {
+        final support = await getApplicationSupportDirectory();
+        final cacheDir = Directory('${support.path}/edited');
+        await cacheDir.create(recursive: true);
+        final cacheFile = File('${cacheDir.path}/${_docId.hashCode.abs()}.md');
+        await cacheFile.writeAsString(out, flush: true);
+        if (widget.entryId != null) {
+          await ref
+              .read(libraryProvider.notifier)
+              .updateMeta(widget.entryId!, editedPath: cacheFile.path);
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('已覆盖保存到应用内编辑缓存')));
+        }
+        return true;
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('保存失败：$e')));
+        }
+        return false;
+      }
+    }
+
+    // txt/md/json：写回原文件（先备份 .bak）
+    try {
+      String? targetPath = widget.entryId == null
+          ? null
+          : ref.read(libraryProvider.notifier).byId(widget.entryId!)?.path;
+      if (targetPath == null) {
+        final location = await getSaveLocation(
+            suggestedName: '${doc.document.title}.${widget.format}');
+        if (location == null) return false;
+        targetPath = location.path;
+      } else {
+        final bytes = await XFile(targetPath).readAsBytes();
+        await XFile.fromData(bytes).saveTo('$targetPath.bak');
+      }
+      await XFile.fromData(utf8.encode(out)).saveTo(targetPath);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('已写回 $targetPath（原文件备份 .bak）')));
+      }
+      return true;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('写回失败：$e')));
+      }
+      return false;
+    }
+  }
+
+  String _pageTextAt(int idx) {
+    if (idx < 0 || idx >= _pages.length) return '';
+    return _pages[idx]
+        .lines
+        .map((l) => l.segments.map((seg) => seg.text).join())
+        .join('\n');
+  }
+
+  /// 手势发生时刻的实时页码（避免用滞后/四舍五入到邻页的 _currentPage）。
+  int _livePageIndex() {
+    if (_officeMode && _continuous) {
+      if (_continuousController.hasClients &&
+          _contOffsets.length == _officePageCount + 1) {
+        final off = _continuousController.offset;
+        int lo = 0, hi = _officePageCount - 1, res = 0;
+        while (lo <= hi) {
+          final mid = (lo + hi) >> 1;
+          if (_contOffsets[mid] <= off) {
+            res = mid;
+            lo = mid + 1;
+          } else {
+            hi = mid - 1;
+          }
+        }
+        return res;
+      }
+      return _currentPage;
+    }
+    if (_pageController.hasClients && _pageController.page != null) {
+      return _pageController.page!.round().clamp(0,
+          math.max((_officeMode ? _officePageCount : _pages.length) - 1, 0));
+    }
+    return _currentPage;
+  }
+
+  /// 长按：本页文字选择面板（选择后可复制 / 翻译所选）。
+  void _showTextSelectionSheet() {
+    final s = AppLocalizations.of(context)!;
+    final idx = _livePageIndex();
+    String text = _officeMode
+        ? (idx >= 0 && idx < _officePageTexts.length
+            ? _officePageTexts[idx]
+            : '')
+        : _pageTextAt(idx);
+    if (text.isEmpty) text = s.noPageText;
+    _sheetSelection = null;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheet) => DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (context, scrollController) => Container(
+            padding: const EdgeInsets.all(16),
+            child: Column(children: [
+              Row(children: [
+                Text(s.pageTextTitle,
+                    style: const TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.bold)),
+                const Spacer(),
+                IconButton(
+                    icon: const Icon(Icons.close, size: 18),
+                    onPressed: () => Navigator.pop(context)),
+              ]),
+              const Divider(),
+              Row(children: [
+                TextButton.icon(
+                  icon: const Icon(Icons.copy, size: 16),
+                  label: Text(s.copySelected),
+                  onPressed: () {
+                    final sel = _sheetSelection;
+                    final t = sel == null
+                        ? text
+                        : text.substring(sel.start.clamp(0, text.length),
+                            sel.end.clamp(0, text.length));
+                    Clipboard.setData(ClipboardData(text: t));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('已复制')));
+                  },
+                ),
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  icon: const Icon(Icons.translate, size: 16),
+                  label: Text(s.translateSelected),
+                  onPressed: () {
+                    final sel = _sheetSelection;
+                    final t = sel == null
+                        ? text
+                        : text.substring(sel.start.clamp(0, text.length),
+                            sel.end.clamp(0, text.length));
+                    Navigator.pop(context);
+                    final lang = PrefsService.instance.loadTargetLang();
+                    _translateAndShow(t,
+                        title: '所选文字 · ${targetLangName(lang)}',
+                        targetLang: lang);
+                  },
+                ),
+              ]),
+              const Divider(),
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: scrollController,
+                  child: SelectableText(text,
+                      style: const TextStyle(fontSize: 15, height: 1.7),
+                      onSelectionChanged: (sel, cause) {
+                        if (sel.start != sel.end) {
+                          _sheetSelection = sel;
+                          setSheet(() {});
+                        }
+                      }),
+                ),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
   }
 
   /// 导出（另存）或写回原文件（.bak 备份）。exportAs=false 且有原文件时写回。
@@ -768,49 +1026,6 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         .lines
         .map((l) => l.segments.map((s) => s.text).join())
         .join('\n');
-  }
-
-  /// 批注列表（含 Agent 添加的）。
-  Future<void> _showAnnotations() async {
-    final s = AppLocalizations.of(context)!;
-    final anns = await AgentRepository(ref.read(appDatabaseProvider))
-        .annotationsFor(_docId);
-    if (!mounted) return;
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(12),
-          shrinkWrap: true,
-          children: [
-            Text(s.annotations,
-                style:
-                    const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            if (anns.isEmpty)
-              const Padding(
-                  padding: EdgeInsets.all(12), child: Text('暂无批注')),
-            ...anns.map((a) => Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(10),
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(a.content,
-                              style: const TextStyle(fontSize: 14)),
-                          const SizedBox(height: 4),
-                          Text(
-                              '原文: ${a.originalText.isEmpty ? "-" : a.originalText}',
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey.shade600)),
-                        ]),
-                  ),
-                )),
-          ],
-        ),
-      ),
-    );
   }
 
   Future<void> _openTranslateMenu() async {
@@ -977,7 +1192,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }
 
   /// 连续阅读视图：按页面真实宽高比紧密堆叠（无页间空隙），
-  /// 滚动时按累计偏移定位当前页。
+  /// 滚动时按累计偏移定位当前页；双指捏合对整体内容缩放平移。
   Widget _buildContinuousOffice(ReaderTheme theme) {
     return LayoutBuilder(builder: (context, constraints) {
       final w = constraints.maxWidth;
@@ -989,12 +1204,24 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         offsets.add(offsets.last + h);
       }
       _contOffsets = offsets;
-      return ListView.builder(
-        controller: _continuousController,
-        itemCount: _officePageCount,
-        itemBuilder: (context, i) => SizedBox(
-          height: heights[i],
-          child: _officePageWidget(i, theme),
+      return Listener(
+        onPointerDown: _onPinchDown,
+        onPointerMove: _onPinchMove,
+        onPointerUp: _onPinchUp,
+        onPointerCancel: _onPinchUp,
+        child: Transform(
+          transform: Matrix4.identity()
+            ..translateByDouble(_contPan.dx, _contPan.dy, 0.0, 1.0)
+            ..scaleByDouble(_contZoom, _contZoom, 1.0, 1.0),
+          alignment: Alignment.topCenter,
+          child: ListView.builder(
+            controller: _continuousController,
+            itemCount: _officePageCount,
+            itemBuilder: (context, i) => SizedBox(
+              height: heights[i],
+              child: _officePageWidget(i, theme),
+            ),
+          ),
         ),
       );
     });
@@ -1019,7 +1246,15 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }
 
   Widget _officePageWidget(int i, ReaderTheme theme) {
-    if (_isPdf) return _buildPdfPage(i + 1, theme);
+    if (_isPdf) {
+      // 连续模式：整体缩放已由外层 Transform 处理，页面本身不再套 IV
+      final info = _pdfRendered[i + 1];
+      if (info != null) {
+        return Image.file(File(info.path),
+            fit: BoxFit.fill, width: double.infinity);
+      }
+      return _buildPdfPage(i + 1, theme, interactive: false);
+    }
     if (_isComic) {
       return Image.file(File(_comicPages[i].path), fit: BoxFit.fill);
     }
@@ -1041,7 +1276,12 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     final selecting = _translateMode == _TranslateMode.block && !_officeMode;
     final isPdf = _isPdf;
     final pageCount = _officeMode ? _officePageCount : _pages.length;
-    return Scaffold(
+    return PopScope(
+      canPop: !_pendingEdits,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _pendingEdits) _exitWithSaveDialog();
+      },
+      child: Scaffold(
       backgroundColor: theme.background,
       body: doc == null
           ? Center(
@@ -1056,6 +1296,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               Positioned.fill(
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
+                  onLongPress:
+                      (_editing || selecting) ? null : _showTextSelectionSheet,
                   onTapUp: selecting
                       ? null
                       : (d) {
@@ -1079,16 +1321,18 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                           controller: _pageController,
                           itemCount: _pdfPageCount,
                           onPageChanged: _onOfficePageChanged,
-                          itemBuilder: (context, i) =>
-                              _buildPdfPage(i + 1, theme),
+                          itemBuilder: (context, i) => _PinchZoom(
+                            key: ValueKey('pdf$i'),
+                            child: _buildPdfPage(i + 1, theme),
+                          ),
                         )
                       : _isComic
                           ? PageView.builder(
                               controller: _pageController,
                               itemCount: _comicPages.length,
                               onPageChanged: _onOfficePageChanged,
-                              itemBuilder: (context, i) => InteractiveViewer(
-                                maxScale: 5.0,
+                              itemBuilder: (context, i) => _PinchZoom(
+                                key: ValueKey('cbz$i'),
                                 child: Center(
                                   child: Image.file(File(_comicPages[i].path),
                                       fit: BoxFit.contain),
@@ -1104,8 +1348,11 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                                     child: Padding(
                                       // 顶栏悬浮在内容上方，留出头部空间
                                       padding: const EdgeInsets.only(top: 64),
-                                      child: XlsxSheetView(
-                                          sheet: _xlsxSheets![i]),
+                                      child: _PinchZoom(
+                                        key: ValueKey('x$i'),
+                                        child: XlsxSheetView(
+                                            sheet: _xlsxSheets![i]),
+                                      ),
                                     ),
                                   ),
                                 )
@@ -1114,9 +1361,11 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                                       controller: _pageController,
                                       itemCount: _pptxSlides!.length,
                                       onPageChanged: _onOfficePageChanged,
-                                      itemBuilder: (context, i) =>
-                                          PptxSlideView(
-                                              slide: _pptxSlides![i]),
+                                      itemBuilder: (context, i) => _PinchZoom(
+                                        key: ValueKey('p$i'),
+                                        child: PptxSlideView(
+                                            slide: _pptxSlides![i]),
+                                      ),
                                     )
                                   : LayoutBuilder(builder: (context, constraints) {
                     _repaginateIfNeeded(
@@ -1139,9 +1388,13 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                           setState(() {});
                           _saveProgress();
                         },
-                        itemBuilder: (context, i) => _buildPage(_pages[i],
-                            theme: theme, fontSize: settings.fontSize,
-                            selecting: selecting),
+                        itemBuilder: (context, i) => _PinchZoom(
+                          key: ValueKey('t$i'),
+                          child: _buildPage(_pages[i],
+                              theme: theme,
+                              fontSize: settings.fontSize,
+                              selecting: selecting),
+                        ),
                       ),
                     );
                   }),
@@ -1182,6 +1435,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                               onPressed: () {
                                 if (_editing) {
                                   _cancelEditing();
+                                } else if (_pendingEdits) {
+                                  _exitWithSaveDialog();
                                 } else {
                                   Navigator.of(context).pop();
                                 }
@@ -1189,7 +1444,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                           Expanded(
                             child: Text(
                                 selecting
-                                    ? '选块翻译：点击要翻译的段落'
+                                    ? '${s.translate}：${s.selectText}'
                                     : _editing
                                         ? '编辑 · ${s.section((_editSection?.index ?? 0) + 1)}'
                                         : widget.title,
@@ -1208,7 +1463,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                               onPressed: () => _applyEditing(doc),
                             ),
                             IconButton(
-                              tooltip: '导出',
+                              tooltip: s.export,
                               icon: Icon(Icons.file_download_outlined,
                                   color: theme.text),
                               onPressed: () =>
@@ -1224,13 +1479,15 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                                     _exportOrSaveDoc(doc, exportAs: false),
                               ),
                             IconButton(
-                              tooltip: '取消',
+                              tooltip: s.cancel,
                               icon: Icon(Icons.close, color: theme.text),
                               onPressed: _cancelEditing,
                             ),
-                          ] else if (!_officeMode)
+                          ] else if (!_isComic)
                             IconButton(
-                              tooltip: '编辑本节',
+                              tooltip: _isPdf || _isXlsx || _isPptx
+                                  ? s.editTextLayer
+                                  : s.editSection,
                               icon:
                                   Icon(Icons.edit_outlined, color: theme.text),
                               onPressed: () => _startEditing(doc),
@@ -1273,13 +1530,6 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                           ),
                           if (!_editing)
                             IconButton(
-                            tooltip: s.annotations,
-                            icon: Icon(Icons.speaker_notes_outlined,
-                                color: theme.text),
-                            onPressed: _showAnnotations,
-                          ),
-                          if (!_editing)
-                            IconButton(
                             tooltip: s.agentPanel,
                             icon: Icon(Icons.auto_awesome,
                                 color: _agentVisible
@@ -1290,7 +1540,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                           ),
                           if (!_editing && _officeMode)
                             IconButton(
-                              tooltip: _continuous ? '单页模式' : '连续阅读',
+                              tooltip: _continuous ? s.singlePageMode : s.continuousMode,
                               icon: Icon(
                                   _continuous
                                       ? Icons.view_day_outlined
@@ -1319,6 +1569,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                   ),
                 ),
               if (_editing)
+                // 就地编辑：无边框、同背景、同字号、同页边距——
+                // 看起来就是原页面的文字变成了可编辑状态
                 Positioned(
                   left: 0,
                   right: 0,
@@ -1327,15 +1579,19 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                   child: Material(
                     color: theme.background,
                     child: Padding(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
                       child: TextField(
                         controller: _editController,
                         maxLines: null,
                         expands: true,
                         textAlignVertical: TextAlignVertical.top,
-                        style: TextStyle(color: theme.text, fontSize: 15),
-                        decoration: const InputDecoration(
-                            border: OutlineInputBorder(), isDense: true),
+                        cursorColor: Colors.teal,
+                        style: TextStyle(
+                            color: theme.text,
+                            fontSize: settings.fontSize,
+                            height: 1.6),
+                        decoration: const InputDecoration.collapsed(
+                            hintText: ''),
                       ),
                     ),
                   ),
@@ -1390,6 +1646,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 ),
               ),
             ]),
+    ),
     );
   }
 
@@ -1620,6 +1877,80 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             ]),
           ),
         ),
+      ),
+    );
+  }
+}
+
+
+/// 双指缩放/平移容器（单页模式用）：
+/// 用 Listener 手动跟踪双指（不参与手势 arena），单指滑动翻页、点击翻页均不受影响；
+/// 双指捏合缩放（1~5 倍），双指拖动平移（缩放后查看边缘）。
+class _PinchZoom extends StatefulWidget {
+  const _PinchZoom({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<_PinchZoom> createState() => _PinchZoomState();
+}
+
+class _PinchZoomState extends State<_PinchZoom> {
+  final Map<int, Offset> _ptrs = {};
+  double _prevDist = 0;
+  double _scale = 1;
+  Offset _prevMid = Offset.zero;
+  Offset _pan = Offset.zero;
+
+  void _down(PointerEvent e) {
+    _ptrs[e.pointer] = e.position;
+    if (_ptrs.length == 2) {
+      final v = _ptrs.values.toList();
+      _prevDist = (v[0] - v[1]).distance;
+      _prevMid = (v[0] + v[1]) / 2;
+    }
+  }
+
+  void _move(PointerEvent e) {
+    if (!_ptrs.containsKey(e.pointer)) return;
+    _ptrs[e.pointer] = e.position;
+    if (_ptrs.length != 2) return;
+    final v = _ptrs.values.toList();
+    final d = (v[0] - v[1]).distance;
+    final mid = (v[0] + v[1]) / 2;
+    if (_prevDist > 0) {
+      _scale = (_scale * d / _prevDist).clamp(1.0, 5.0);
+      final size = context.size ?? const Size(400, 800);
+      final maxDx = size.width * (_scale - 1) / 2;
+      final maxDy = size.height * (_scale - 1) / 2;
+      _pan = Offset(
+          (_pan.dx + mid.dx - _prevMid.dx).clamp(-maxDx, maxDx),
+          (_pan.dy + mid.dy - _prevMid.dy).clamp(-maxDy, maxDy));
+      if (_scale <= 1.01) _pan = Offset.zero;
+      if (mounted) setState(() {});
+    }
+    _prevDist = d;
+    _prevMid = mid;
+  }
+
+  void _up(PointerEvent e) {
+    _ptrs.remove(e.pointer);
+    _prevDist = 0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      onPointerDown: _down,
+      onPointerMove: _move,
+      onPointerUp: _up,
+      onPointerCancel: _up,
+      child: Transform(
+        transform: Matrix4.identity()
+          ..translateByDouble(_pan.dx, _pan.dy, 0.0, 1.0)
+          ..scaleByDouble(_scale, _scale, 1.0, 1.0),
+        alignment: Alignment.center,
+        child: widget.child,
       ),
     );
   }

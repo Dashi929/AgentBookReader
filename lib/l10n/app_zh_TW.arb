@@ -1,0 +1,106 @@
+{
+  "@@locale": "zh_TW",
+  "appTitle": "AgentBookReader",
+  "library": "書架",
+  "settings": "設定",
+  "reader": "閱讀",
+  "importFiles": "匯入文件",
+  "importFailed": "匯入失敗：{reason}",
+  "agentPanel": "智慧助理",
+  "agentAsk": "向助理提問這本書…",
+  "agentWorkspaceSelect": "選擇要處理的文檔（可多選）",
+  "agentWorkspaceAsk": "讓 Agent 處理選中的文檔…",
+  "translate": "翻譯",
+  "translateJobRunning": "翻譯中 {done}/{total}…",
+  "originalText": "原文",
+  "translatedText": "譯文",
+  "section": "第{n}節",
+  "page": "第 {n} 頁",
+  "words": "{count} 字",
+  "confirm": "確認",
+  "cancel": "取消",
+  "llmBaseUrl": "接口地址",
+  "llmApiKey": "API Key",
+  "llmModel": "模型名",
+  "proposalTitle": "改寫提案",
+  "reject": "拒絕",
+  "apply": "確認應用",
+  "editSection": "編輯本節",
+  "unTranslated": "【本節尚未翻譯】{title}",
+  "annotations": "批註",
+  "export": "匯出",
+  "writeBack": "寫入原文件(.bak)",
+  "chapters": "章節",
+  "originalFileUpdated": "原文件已備份並更新",
+  "continueReading": "繼續閱讀：{page}",
+  "language": "語言",
+  "followSystem": "跟隨系統",
+  "editTextLayer": "編輯文字層",
+  "selectText": "選擇文字",
+  "continuousMode": "連續閱讀",
+  "singlePageMode": "單頁模式",
+  "saveAs": "另存為",
+  "overwrite": "覆蓋",
+  "discardChanges": "放棄修改",
+  "continueEditing": "繼續編輯",
+  "unsavedTitle": "有未儲存的修改",
+  "exitSaveOffice": "該格式的編輯作用於文字層（Agent/翻譯/詳情使用）；\n覆蓋 = 存入應用內快取並長期生效；另存 = 匯出為 Markdown 檔案。",
+  "exitSaveText": "覆蓋 = 寫回原檔案（自動備份 .bak）；另存 = 匯出為新檔案。",
+  "pageTextTitle": "本頁文字（長按可選擇）",
+  "copySelected": "複製所選",
+  "translateSelected": "翻譯所選",
+  "noPageText": "（本頁沒有可選擇的文字）",
+  "editCacheSaved": "已保存到編輯快取，退出時可選另存 / 覆蓋",
+  "@importFailed": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "@translateJobRunning": {
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "@section": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "@page": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "@words": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unTranslated": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "@continueReading": {
+    "placeholders": {
+      "page": {
+        "type": "String"
+      }
+    }
+  }
+}

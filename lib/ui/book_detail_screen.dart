@@ -54,6 +54,40 @@ class _BookDetailScreenState extends ConsumerState<BookDetailScreen> {
       return;
     }
     try {
+      // 编辑缓存优先：office/pdf 的文字层可被用户编辑覆盖
+      if (entry.editedPath.isNotEmpty &&
+          File(entry.editedPath).existsSync()) {
+        final edited = File(entry.editedPath).readAsStringSync();
+        _content = edited;
+        final doc = await PlainTextDocument.create(
+            entry.id, entry.title, DocFormat.md, edited);
+        final chapters = <({String title, String? subtitle})>[];
+        for (final sec in doc.document.sections) {
+          chapters.add((
+            title: sec.title.trim().isEmpty
+                ? '第 ${sec.index + 1} 节'
+                : sec.title.trim(),
+            subtitle: '${sec.paragraphs.length} 段',
+          ));
+        }
+        final previewText = doc.document.sections
+            .expand((sec) => sec.paragraphs)
+            .map((p) => p.plainText)
+            .where((t) => t.trim().isNotEmpty && !t.startsWith('[[IMG:'))
+            .join('\n');
+        if (mounted) {
+          setState(() {
+            _chapters = chapters;
+            _preview = previewText.isEmpty
+                ? ''
+                : (previewText.length > 300
+                    ? '${previewText.substring(0, 300)}…'
+                    : previewText);
+            _loading = false;
+          });
+        }
+        return;
+      }
       final bytes = await XFile(entry.path).readAsBytes();
       final ext = entry.extension;
       if (ext == 'pdf') {

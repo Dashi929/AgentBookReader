@@ -148,4 +148,232 @@ class AppLocalizationsZh extends AppLocalizations {
   String continueReading(String page) {
     return '继续阅读：$page';
   }
+
+  @override
+  String get language => '语言';
+
+  @override
+  String get followSystem => '跟随系统';
+
+  @override
+  String get editTextLayer => '编辑文字层';
+
+  @override
+  String get selectText => '选择文字';
+
+  @override
+  String get continuousMode => '连续阅读';
+
+  @override
+  String get singlePageMode => '单页模式';
+
+  @override
+  String get saveAs => '另存为';
+
+  @override
+  String get overwrite => '覆盖';
+
+  @override
+  String get discardChanges => '放弃修改';
+
+  @override
+  String get continueEditing => '继续编辑';
+
+  @override
+  String get unsavedTitle => '有未保存的修改';
+
+  @override
+  String get exitSaveOffice =>
+      '该格式的编辑作用于文字层（Agent/翻译/详情使用）；\n覆盖 = 存入应用内缓存并长期生效；另存 = 导出为 Markdown 文件。';
+
+  @override
+  String get exitSaveText => '覆盖 = 写回原文件（自动备份 .bak）；另存 = 导出为新文件。';
+
+  @override
+  String get pageTextTitle => '本页文字（长按可选择）';
+
+  @override
+  String get copySelected => '复制所选';
+
+  @override
+  String get translateSelected => '翻译所选';
+
+  @override
+  String get noPageText => '（本页没有可选择的文字）';
+
+  @override
+  String get editCacheSaved => '已保存到编辑缓存，退出时可选另存 / 覆盖';
+}
+
+/// The translations for Chinese, as used in Taiwan (`zh_TW`).
+class AppLocalizationsZhTw extends AppLocalizationsZh {
+  AppLocalizationsZhTw() : super('zh_TW');
+
+  @override
+  String get appTitle => 'AgentBookReader';
+
+  @override
+  String get library => '書架';
+
+  @override
+  String get settings => '設定';
+
+  @override
+  String get reader => '閱讀';
+
+  @override
+  String get importFiles => '匯入文件';
+
+  @override
+  String importFailed(String reason) {
+    return '匯入失敗：$reason';
+  }
+
+  @override
+  String get agentPanel => '智慧助理';
+
+  @override
+  String get agentAsk => '向助理提問這本書…';
+
+  @override
+  String get agentWorkspaceSelect => '選擇要處理的文檔（可多選）';
+
+  @override
+  String get agentWorkspaceAsk => '讓 Agent 處理選中的文檔…';
+
+  @override
+  String get translate => '翻譯';
+
+  @override
+  String translateJobRunning(int done, int total) {
+    return '翻譯中 $done/$total…';
+  }
+
+  @override
+  String get originalText => '原文';
+
+  @override
+  String get translatedText => '譯文';
+
+  @override
+  String section(int n) {
+    return '第$n節';
+  }
+
+  @override
+  String page(int n) {
+    return '第 $n 頁';
+  }
+
+  @override
+  String words(int count) {
+    return '$count 字';
+  }
+
+  @override
+  String get confirm => '確認';
+
+  @override
+  String get cancel => '取消';
+
+  @override
+  String get llmBaseUrl => '接口地址';
+
+  @override
+  String get llmApiKey => 'API Key';
+
+  @override
+  String get llmModel => '模型名';
+
+  @override
+  String get proposalTitle => '改寫提案';
+
+  @override
+  String get reject => '拒絕';
+
+  @override
+  String get apply => '確認應用';
+
+  @override
+  String get editSection => '編輯本節';
+
+  @override
+  String unTranslated(String title) {
+    return '【本節尚未翻譯】$title';
+  }
+
+  @override
+  String get annotations => '批註';
+
+  @override
+  String get export => '匯出';
+
+  @override
+  String get chapters => '章節';
+
+  @override
+  String get writeBack => '寫入原文件(.bak)';
+
+  @override
+  String get originalFileUpdated => '原文件已備份並更新';
+
+  @override
+  String continueReading(String page) {
+    return '繼續閱讀：$page';
+  }
+
+  @override
+  String get language => '語言';
+
+  @override
+  String get followSystem => '跟隨系統';
+
+  @override
+  String get editTextLayer => '編輯文字層';
+
+  @override
+  String get selectText => '選擇文字';
+
+  @override
+  String get continuousMode => '連續閱讀';
+
+  @override
+  String get singlePageMode => '單頁模式';
+
+  @override
+  String get saveAs => '另存為';
+
+  @override
+  String get overwrite => '覆蓋';
+
+  @override
+  String get discardChanges => '放棄修改';
+
+  @override
+  String get continueEditing => '繼續編輯';
+
+  @override
+  String get unsavedTitle => '有未儲存的修改';
+
+  @override
+  String get exitSaveOffice =>
+      '該格式的編輯作用於文字層（Agent/翻譯/詳情使用）；\n覆蓋 = 存入應用內快取並長期生效；另存 = 匯出為 Markdown 檔案。';
+
+  @override
+  String get exitSaveText => '覆蓋 = 寫回原檔案（自動備份 .bak）；另存 = 匯出為新檔案。';
+
+  @override
+  String get pageTextTitle => '本頁文字（長按可選擇）';
+
+  @override
+  String get copySelected => '複製所選';
+
+  @override
+  String get translateSelected => '翻譯所選';
+
+  @override
+  String get noPageText => '（本頁沒有可選擇的文字）';
+
+  @override
+  String get editCacheSaved => '已保存到編輯快取，退出時可選另存 / 覆蓋';
 }

@@ -79,6 +79,18 @@ class $DocumentsTable extends Documents
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _editedPathMeta = const VerificationMeta(
+    'editedPath',
+  );
+  @override
+  late final GeneratedColumn<String> editedPath = GeneratedColumn<String>(
+    'edited_path',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _lastPageMeta = const VerificationMeta(
     'lastPage',
   );
@@ -111,6 +123,7 @@ class $DocumentsTable extends Documents
     author,
     synopsis,
     coverPath,
+    editedPath,
     lastPage,
     importedAt,
   ];
@@ -173,6 +186,12 @@ class $DocumentsTable extends Documents
         coverPath.isAcceptableOrUnknown(data['cover_path']!, _coverPathMeta),
       );
     }
+    if (data.containsKey('edited_path')) {
+      context.handle(
+        _editedPathMeta,
+        editedPath.isAcceptableOrUnknown(data['edited_path']!, _editedPathMeta),
+      );
+    }
     if (data.containsKey('last_page')) {
       context.handle(
         _lastPageMeta,
@@ -224,6 +243,10 @@ class $DocumentsTable extends Documents
         DriftSqlType.string,
         data['${effectivePrefix}cover_path'],
       )!,
+      editedPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}edited_path'],
+      )!,
       lastPage: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}last_page'],
@@ -249,6 +272,7 @@ class Document extends DataClass implements Insertable<Document> {
   final String author;
   final String synopsis;
   final String coverPath;
+  final String editedPath;
   final int lastPage;
   final DateTime importedAt;
   const Document({
@@ -259,6 +283,7 @@ class Document extends DataClass implements Insertable<Document> {
     required this.author,
     required this.synopsis,
     required this.coverPath,
+    required this.editedPath,
     required this.lastPage,
     required this.importedAt,
   });
@@ -272,6 +297,7 @@ class Document extends DataClass implements Insertable<Document> {
     map['author'] = Variable<String>(author);
     map['synopsis'] = Variable<String>(synopsis);
     map['cover_path'] = Variable<String>(coverPath);
+    map['edited_path'] = Variable<String>(editedPath);
     map['last_page'] = Variable<int>(lastPage);
     map['imported_at'] = Variable<DateTime>(importedAt);
     return map;
@@ -286,6 +312,7 @@ class Document extends DataClass implements Insertable<Document> {
       author: Value(author),
       synopsis: Value(synopsis),
       coverPath: Value(coverPath),
+      editedPath: Value(editedPath),
       lastPage: Value(lastPage),
       importedAt: Value(importedAt),
     );
@@ -304,6 +331,7 @@ class Document extends DataClass implements Insertable<Document> {
       author: serializer.fromJson<String>(json['author']),
       synopsis: serializer.fromJson<String>(json['synopsis']),
       coverPath: serializer.fromJson<String>(json['coverPath']),
+      editedPath: serializer.fromJson<String>(json['editedPath']),
       lastPage: serializer.fromJson<int>(json['lastPage']),
       importedAt: serializer.fromJson<DateTime>(json['importedAt']),
     );
@@ -319,6 +347,7 @@ class Document extends DataClass implements Insertable<Document> {
       'author': serializer.toJson<String>(author),
       'synopsis': serializer.toJson<String>(synopsis),
       'coverPath': serializer.toJson<String>(coverPath),
+      'editedPath': serializer.toJson<String>(editedPath),
       'lastPage': serializer.toJson<int>(lastPage),
       'importedAt': serializer.toJson<DateTime>(importedAt),
     };
@@ -332,6 +361,7 @@ class Document extends DataClass implements Insertable<Document> {
     String? author,
     String? synopsis,
     String? coverPath,
+    String? editedPath,
     int? lastPage,
     DateTime? importedAt,
   }) => Document(
@@ -342,6 +372,7 @@ class Document extends DataClass implements Insertable<Document> {
     author: author ?? this.author,
     synopsis: synopsis ?? this.synopsis,
     coverPath: coverPath ?? this.coverPath,
+    editedPath: editedPath ?? this.editedPath,
     lastPage: lastPage ?? this.lastPage,
     importedAt: importedAt ?? this.importedAt,
   );
@@ -354,6 +385,9 @@ class Document extends DataClass implements Insertable<Document> {
       author: data.author.present ? data.author.value : this.author,
       synopsis: data.synopsis.present ? data.synopsis.value : this.synopsis,
       coverPath: data.coverPath.present ? data.coverPath.value : this.coverPath,
+      editedPath: data.editedPath.present
+          ? data.editedPath.value
+          : this.editedPath,
       lastPage: data.lastPage.present ? data.lastPage.value : this.lastPage,
       importedAt: data.importedAt.present
           ? data.importedAt.value
@@ -371,6 +405,7 @@ class Document extends DataClass implements Insertable<Document> {
           ..write('author: $author, ')
           ..write('synopsis: $synopsis, ')
           ..write('coverPath: $coverPath, ')
+          ..write('editedPath: $editedPath, ')
           ..write('lastPage: $lastPage, ')
           ..write('importedAt: $importedAt')
           ..write(')'))
@@ -386,6 +421,7 @@ class Document extends DataClass implements Insertable<Document> {
     author,
     synopsis,
     coverPath,
+    editedPath,
     lastPage,
     importedAt,
   );
@@ -400,6 +436,7 @@ class Document extends DataClass implements Insertable<Document> {
           other.author == this.author &&
           other.synopsis == this.synopsis &&
           other.coverPath == this.coverPath &&
+          other.editedPath == this.editedPath &&
           other.lastPage == this.lastPage &&
           other.importedAt == this.importedAt);
 }
@@ -412,6 +449,7 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
   final Value<String> author;
   final Value<String> synopsis;
   final Value<String> coverPath;
+  final Value<String> editedPath;
   final Value<int> lastPage;
   final Value<DateTime> importedAt;
   final Value<int> rowid;
@@ -423,6 +461,7 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
     this.author = const Value.absent(),
     this.synopsis = const Value.absent(),
     this.coverPath = const Value.absent(),
+    this.editedPath = const Value.absent(),
     this.lastPage = const Value.absent(),
     this.importedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -435,6 +474,7 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
     this.author = const Value.absent(),
     this.synopsis = const Value.absent(),
     this.coverPath = const Value.absent(),
+    this.editedPath = const Value.absent(),
     this.lastPage = const Value.absent(),
     required DateTime importedAt,
     this.rowid = const Value.absent(),
@@ -451,6 +491,7 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
     Expression<String>? author,
     Expression<String>? synopsis,
     Expression<String>? coverPath,
+    Expression<String>? editedPath,
     Expression<int>? lastPage,
     Expression<DateTime>? importedAt,
     Expression<int>? rowid,
@@ -463,6 +504,7 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
       if (author != null) 'author': author,
       if (synopsis != null) 'synopsis': synopsis,
       if (coverPath != null) 'cover_path': coverPath,
+      if (editedPath != null) 'edited_path': editedPath,
       if (lastPage != null) 'last_page': lastPage,
       if (importedAt != null) 'imported_at': importedAt,
       if (rowid != null) 'rowid': rowid,
@@ -477,6 +519,7 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
     Value<String>? author,
     Value<String>? synopsis,
     Value<String>? coverPath,
+    Value<String>? editedPath,
     Value<int>? lastPage,
     Value<DateTime>? importedAt,
     Value<int>? rowid,
@@ -489,6 +532,7 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
       author: author ?? this.author,
       synopsis: synopsis ?? this.synopsis,
       coverPath: coverPath ?? this.coverPath,
+      editedPath: editedPath ?? this.editedPath,
       lastPage: lastPage ?? this.lastPage,
       importedAt: importedAt ?? this.importedAt,
       rowid: rowid ?? this.rowid,
@@ -519,6 +563,9 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
     if (coverPath.present) {
       map['cover_path'] = Variable<String>(coverPath.value);
     }
+    if (editedPath.present) {
+      map['edited_path'] = Variable<String>(editedPath.value);
+    }
     if (lastPage.present) {
       map['last_page'] = Variable<int>(lastPage.value);
     }
@@ -541,6 +588,7 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
           ..write('author: $author, ')
           ..write('synopsis: $synopsis, ')
           ..write('coverPath: $coverPath, ')
+          ..write('editedPath: $editedPath, ')
           ..write('lastPage: $lastPage, ')
           ..write('importedAt: $importedAt, ')
           ..write('rowid: $rowid')
@@ -2138,6 +2186,7 @@ typedef $$DocumentsTableCreateCompanionBuilder =
       Value<String> author,
       Value<String> synopsis,
       Value<String> coverPath,
+      Value<String> editedPath,
       Value<int> lastPage,
       required DateTime importedAt,
       Value<int> rowid,
@@ -2151,6 +2200,7 @@ typedef $$DocumentsTableUpdateCompanionBuilder =
       Value<String> author,
       Value<String> synopsis,
       Value<String> coverPath,
+      Value<String> editedPath,
       Value<int> lastPage,
       Value<DateTime> importedAt,
       Value<int> rowid,
@@ -2197,6 +2247,11 @@ class $$DocumentsTableFilterComposer
 
   ColumnFilters<String> get coverPath => $composableBuilder(
     column: $table.coverPath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get editedPath => $composableBuilder(
+    column: $table.editedPath,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2255,6 +2310,11 @@ class $$DocumentsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get editedPath => $composableBuilder(
+    column: $table.editedPath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get lastPage => $composableBuilder(
     column: $table.lastPage,
     builder: (column) => ColumnOrderings(column),
@@ -2295,6 +2355,11 @@ class $$DocumentsTableAnnotationComposer
 
   GeneratedColumn<String> get coverPath =>
       $composableBuilder(column: $table.coverPath, builder: (column) => column);
+
+  GeneratedColumn<String> get editedPath => $composableBuilder(
+    column: $table.editedPath,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<int> get lastPage =>
       $composableBuilder(column: $table.lastPage, builder: (column) => column);
@@ -2340,6 +2405,7 @@ class $$DocumentsTableTableManager
                 Value<String> author = const Value.absent(),
                 Value<String> synopsis = const Value.absent(),
                 Value<String> coverPath = const Value.absent(),
+                Value<String> editedPath = const Value.absent(),
                 Value<int> lastPage = const Value.absent(),
                 Value<DateTime> importedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -2351,6 +2417,7 @@ class $$DocumentsTableTableManager
                 author: author,
                 synopsis: synopsis,
                 coverPath: coverPath,
+                editedPath: editedPath,
                 lastPage: lastPage,
                 importedAt: importedAt,
                 rowid: rowid,
@@ -2364,6 +2431,7 @@ class $$DocumentsTableTableManager
                 Value<String> author = const Value.absent(),
                 Value<String> synopsis = const Value.absent(),
                 Value<String> coverPath = const Value.absent(),
+                Value<String> editedPath = const Value.absent(),
                 Value<int> lastPage = const Value.absent(),
                 required DateTime importedAt,
                 Value<int> rowid = const Value.absent(),
@@ -2375,6 +2443,7 @@ class $$DocumentsTableTableManager
                 author: author,
                 synopsis: synopsis,
                 coverPath: coverPath,
+                editedPath: editedPath,
                 lastPage: lastPage,
                 importedAt: importedAt,
                 rowid: rowid,

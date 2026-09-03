@@ -1,0 +1,106 @@
+{
+  "@@locale": "ja",
+  "appTitle": "AgentBookReader",
+  "library": "ライブラリ",
+  "settings": "設定",
+  "reader": "リーダー",
+  "importFiles": "ファイルをインポート",
+  "importFailed": "インポート失敗：{reason}",
+  "agentPanel": "スマートアシスタント",
+  "agentAsk": "この本についてアシスタントに質問…",
+  "agentWorkspaceSelect": "処理するドキュメントを選択（複数可）",
+  "agentWorkspaceAsk": "選択したドキュメントを Agent に処理させる…",
+  "translate": "翻訳",
+  "translateJobRunning": "翻訳中 {done}/{total}…",
+  "originalText": "原文",
+  "translatedText": "訳文",
+  "section": "第{n}セクション",
+  "page": "{n} ページ",
+  "words": "{count} 文字",
+  "confirm": "確認",
+  "cancel": "キャンセル",
+  "llmBaseUrl": "APIエンドポイント",
+  "llmApiKey": "API Key",
+  "llmModel": "モデル名",
+  "proposalTitle": "リライト提案",
+  "reject": "却下",
+  "apply": "適用",
+  "editSection": "このセクションを編集",
+  "unTranslated": "【未翻訳のセクション】{title}",
+  "annotations": "注釈",
+  "export": "エクスポート",
+  "writeBack": "元ファイルに書き戻す(.bak)",
+  "chapters": "目次",
+  "originalFileUpdated": "元ファイルをバックアップして更新しました",
+  "continueReading": "続きから読む：{page}",
+  "language": "言語",
+  "followSystem": "システムに従う",
+  "editTextLayer": "文字層を編集",
+  "selectText": "文字を選択",
+  "continuousMode": "連続スクロール",
+  "singlePageMode": "シングルページ",
+  "saveAs": "名前を付けて保存",
+  "overwrite": "上書き",
+  "discardChanges": "変更を破棄",
+  "continueEditing": "編集を続ける",
+  "unsavedTitle": "未保存の変更があります",
+  "exitSaveOffice": "この形式の編集は文字層（Agent/翻訳/詳細）に適用されます。\n上書き = アプリ内キャッシュに永続保存；保存 = Markdown ファイルとしてエクスポート。",
+  "exitSaveText": "上書き = 元のファイルに書き戻す（.bak 自動バックアップ）；保存 = 新しいファイルとしてエクスポート。",
+  "pageTextTitle": "ページの文字（長押しで選択）",
+  "copySelected": "選択範囲をコピー",
+  "translateSelected": "選択範囲を翻訳",
+  "noPageText": "（このページに選択できる文字はありません）",
+  "editCacheSaved": "編集キャッシュに保存しました（終了時に保存方法を選択）",
+  "@importFailed": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "@translateJobRunning": {
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "@section": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "@page": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "@words": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unTranslated": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "@continueReading": {
+    "placeholders": {
+      "page": {
+        "type": "String"
+      }
+    }
+  }
+}

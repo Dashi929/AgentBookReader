@@ -69,5 +69,23 @@
         "type": "String"
       }
     }
-  }
+  },
+  "language": "语言",
+  "followSystem": "跟随系统",
+  "editTextLayer": "编辑文字层",
+  "selectText": "选择文字",
+  "continuousMode": "连续阅读",
+  "singlePageMode": "单页模式",
+  "saveAs": "另存为",
+  "overwrite": "覆盖",
+  "discardChanges": "放弃修改",
+  "continueEditing": "继续编辑",
+  "unsavedTitle": "有未保存的修改",
+  "exitSaveOffice": "该格式的编辑作用于文字层（Agent/翻译/详情使用）；\n覆盖 = 存入应用内缓存并长期生效；另存 = 导出为 Markdown 文件。",
+  "exitSaveText": "覆盖 = 写回原文件（自动备份 .bak）；另存 = 导出为新文件。",
+  "pageTextTitle": "本页文字（长按可选择）",
+  "copySelected": "复制所选",
+  "translateSelected": "翻译所选",
+  "noPageText": "（本页没有可选择的文字）",
+  "editCacheSaved": "已保存到编辑缓存，退出时可选另存 / 覆盖"
 }

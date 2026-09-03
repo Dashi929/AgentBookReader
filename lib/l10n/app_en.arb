@@ -93,5 +93,23 @@
         "type": "String"
       }
     }
-  }
+  },
+  "language": "Language",
+  "followSystem": "Follow system",
+  "editTextLayer": "Edit text layer",
+  "selectText": "Select text",
+  "continuousMode": "Continuous",
+  "singlePageMode": "Single page",
+  "saveAs": "Save as",
+  "overwrite": "Overwrite",
+  "discardChanges": "Discard changes",
+  "continueEditing": "Keep editing",
+  "unsavedTitle": "Unsaved changes",
+  "exitSaveOffice": "Edits apply to the text layer (Agent/translate/details).\nOverwrite = save to in-app cache permanently; Save as = export a Markdown file.",
+  "exitSaveText": "Overwrite = write back to the original file (a .bak backup is made); Save as = export a new file.",
+  "pageTextTitle": "Page text (long-press to select)",
+  "copySelected": "Copy selection",
+  "translateSelected": "Translate selection",
+  "noPageText": "(No selectable text on this page)",
+  "editCacheSaved": "Saved to edit cache; choose save/overwrite on exit"
 }

@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
-import 'package:flutter/material.dart' show Color;
+import 'package:flutter/material.dart' show Color, Locale;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -36,6 +36,10 @@ class PrefsService {
   bool loadLibraryView() => sp.getBool('libraryGridView') ?? false;
   void saveLibraryView(bool grid) => sp.setBool('libraryGridView', grid);
 
+  /// 应用语言（''=跟随系统；en / zh / zh_TW / ja）
+  String loadAppLocale() => sp.getString('appLocale') ?? '';
+  void saveAppLocale(String v) => sp.setString('appLocale', v);
+
   /// 阅读视图：true=连续滚动，false=单页翻页（office/图像页格式用）
   bool loadReaderContinuous() => sp.getBool('readerContinuous') ?? false;
   void saveReaderContinuous(bool v) => sp.setBool('readerContinuous', v);
@@ -66,6 +70,7 @@ class BookEntry {
     this.author = '',
     this.synopsis = '',
     this.coverPath = '',
+    this.editedPath = '',
     this.lastPage = 0,
   });
 
@@ -76,6 +81,7 @@ class BookEntry {
   String author; // 空表示未知，可由 AI 补全
   String synopsis;
   String coverPath; // 封面图片路径；空表示用生成式占位封面
+  String editedPath; // 编辑后的文字层缓存（office/pdf）；空表示无编辑
   int lastPage;
 }
 
@@ -128,6 +134,7 @@ class LibraryNotifier extends StateNotifier<List<BookEntry>> {
               author: r.author,
               synopsis: r.synopsis,
               coverPath: r.coverPath,
+              editedPath: r.editedPath,
               lastPage: r.lastPage,
             ))
         .toList();
@@ -142,6 +149,7 @@ class LibraryNotifier extends StateNotifier<List<BookEntry>> {
           author: Value(entry.author),
           synopsis: Value(entry.synopsis),
           coverPath: Value(entry.coverPath),
+          editedPath: Value(entry.editedPath),
           lastPage: Value(entry.lastPage),
           importedAt: DateTime.now(),
         ));
@@ -164,14 +172,20 @@ class LibraryNotifier extends StateNotifier<List<BookEntry>> {
 
   /// 元数据更新（作者/简介/封面），任一传 null 表示不改。
   Future<void> updateMeta(String id,
-      {String? author, String? synopsis, String? coverPath}) async {
+      {String? author,
+      String? synopsis,
+      String? coverPath,
+      String? editedPath}) async {
     await (_db.update(_db.documents)..where((u) => u.id.equals(id))).write(
         DocumentsCompanion(
             author: author == null ? const Value.absent() : Value(author),
             synopsis:
                 synopsis == null ? const Value.absent() : Value(synopsis),
             coverPath:
-                coverPath == null ? const Value.absent() : Value(coverPath)));
+                coverPath == null ? const Value.absent() : Value(coverPath),
+            editedPath: editedPath == null
+                ? const Value.absent()
+                : Value(editedPath)));
     state = [
       for (final e in state)
         if (e.id == id)
@@ -179,6 +193,7 @@ class LibraryNotifier extends StateNotifier<List<BookEntry>> {
             ..author = author ?? e.author
             ..synopsis = synopsis ?? e.synopsis
             ..coverPath = coverPath ?? e.coverPath
+            ..editedPath = editedPath ?? e.editedPath
         else
           e
     ];
@@ -189,6 +204,25 @@ class LibraryNotifier extends StateNotifier<List<BookEntry>> {
       if (e.id == id) return e;
     }
     return null;
+  }
+}
+
+/// 应用语言：''=跟随系统，en / zh / zh_TW / ja
+final appLocaleProvider = StateProvider<String>(
+    (ref) => PrefsService.instance.loadAppLocale());
+
+Locale? resolveAppLocale(String code) {
+  switch (code) {
+    case 'en':
+      return const Locale('en');
+    case 'zh':
+      return const Locale('zh');
+    case 'zh_TW':
+      return const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant');
+    case 'ja':
+      return const Locale('ja');
+    default:
+      return null; // 跟随系统
   }
 }
 

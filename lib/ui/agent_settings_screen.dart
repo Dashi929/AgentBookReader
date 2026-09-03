@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../agent/agent_settings.dart';
 import '../agent/llm_client.dart';
@@ -7,14 +8,14 @@ import '../state/app_state.dart';
 
 /// LLM 连接设置：baseURL / API Key / 模型名 全部手填（无预设），
 /// 提供"测试连接"一键验证连通性（含 Key 有效性）。
-class AgentSettingsScreen extends StatefulWidget {
+class AgentSettingsScreen extends ConsumerStatefulWidget {
   const AgentSettingsScreen({super.key});
 
   @override
-  State<AgentSettingsScreen> createState() => _AgentSettingsScreenState();
+  ConsumerState<AgentSettingsScreen> createState() => _AgentSettingsScreenState();
 }
 
-class _AgentSettingsScreenState extends State<AgentSettingsScreen> {
+class _AgentSettingsScreenState extends ConsumerState<AgentSettingsScreen> {
   final _baseUrl = TextEditingController();
   final _apiKey = TextEditingController();
   final _model = TextEditingController();
@@ -145,6 +146,23 @@ class _AgentSettingsScreenState extends State<AgentSettingsScreen> {
                       PrefsService.instance.saveTranslationProvider(v);
                       setState(() {});
                     }
+                  },
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: PrefsService.instance.loadAppLocale(),
+                  decoration: InputDecoration(labelText: s.language),
+                  items: [
+                    DropdownMenuItem(value: '', child: Text(s.followSystem)),
+                    const DropdownMenuItem(value: 'en', child: Text('English')),
+                    const DropdownMenuItem(value: 'zh', child: Text('简体中文')),
+                    const DropdownMenuItem(value: 'zh_TW', child: Text('繁體中文')),
+                    const DropdownMenuItem(value: 'ja', child: Text('日本語')),
+                  ],
+                  onChanged: (v) {
+                    PrefsService.instance.saveAppLocale(v ?? '');
+                    ref.read(appLocaleProvider.notifier).state = v ?? '';
+                    setState(() {});
                   },
                 ),
                 const SizedBox(height: 12),

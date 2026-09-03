@@ -8,11 +8,16 @@ import '../core/parser/xlsx_extractor.dart';
 /// 合并单元格、列宽/行高、加粗与对齐、数字右对齐。可双向滚动。
 class XlsxSheetView extends StatelessWidget {
   const XlsxSheetView(
-      {super.key, required this.sheet, this.scale = 1.2, this.verticalScroll = true});
+      {super.key,
+      required this.sheet,
+      this.scale = 1.2,
+      this.verticalScroll = true,
+      this.hScroll = true});
 
   final XlsxSheetData sheet;
   final double scale; // 字符宽度→像素
-  final bool verticalScroll; // false：纵向由外部滚动容器接管（连续模式）
+  final bool verticalScroll; // false：纵向由外部滚动容器/缩放接管（连续/缩放模式）
+  final bool hScroll; // false：横向由外部缩放容器接管
 
   static const _rowHeadW = 44.0;
   static const _colHeadH = 22.0;
@@ -50,6 +55,7 @@ class XlsxSheetView extends StatelessWidget {
         painter: _XlsxGridPainter(this),
       ),
     );
+    if (!verticalScroll && !hScroll) return grid; // 完全交给外部缩放容器
     if (!verticalScroll) {
       return SingleChildScrollView(
         scrollDirection: Axis.horizontal,
