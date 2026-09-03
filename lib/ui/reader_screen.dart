@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:ui' as ui;
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +9,7 @@ import 'package:pdfrx/pdfrx.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../agent/agent_settings.dart';
+import '../core/io/pdf_render.dart';
 import '../agent/llm_client.dart';
 import '../agent/translation_providers.dart';
 import '../core/controller/plain_text_document.dart';
@@ -246,38 +246,14 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     _pdfRendering.add(p);
     try {
       final page = _pdfDoc!.pages[p - 1];
-      const targetW = 1080;
-      final image = await page.render(
-          fullWidth: targetW.toDouble(),
-          fullHeight: targetW * page.height / page.width);
-      if (image == null) return null;
-      final rgba = Uint8List(image.pixels.length);
-      for (var i = 0; i < image.pixels.length; i += 4) {
-        rgba[i] = image.pixels[i + 2];
-        rgba[i + 1] = image.pixels[i + 1];
-        rgba[i + 2] = image.pixels[i];
-        rgba[i + 3] = image.pixels[i + 3];
-      }
-      final buffer = await ui.ImmutableBuffer.fromUint8List(rgba);
-      final descriptor = ui.ImageDescriptor.raw(buffer,
-          width: image.width,
-          height: image.height,
-          pixelFormat: ui.PixelFormat.rgba8888);
-      final codec = await descriptor.instantiateCodec();
-      final frameData = await codec.getNextFrame();
-      final png =
-          await frameData.image.toByteData(format: ui.ImageByteFormat.png);
-      frameData.image.dispose();
-      codec.dispose();
-      descriptor.dispose();
-      buffer.dispose();
-      final w = image.width, h = image.height;
-      image.dispose();
+      final png = await renderPdfPagePng(page);
       if (png == null) return null;
       Directory(_pdfImageDir).createSync(recursive: true);
       final f = File('$_pdfImageDir/pdfp$p.png');
-      f.writeAsBytesSync(
-          png.buffer.asUint8List(png.offsetInBytes, png.lengthInBytes));
+      f.writeAsBytesSync(png);
+      // 宽高从 PNG 头读取（IHDR：16-23 字节，大端）
+      final w = (png[16] << 24) | (png[17] << 16) | (png[18] << 8) | png[19];
+      final h = (png[20] << 24) | (png[21] << 16) | (png[22] << 8) | png[23];
       final result = (path: f.path, w: w, h: h);
       if (mounted) setState(() => _pdfRendered[p] = result);
       _savePdfRenderManifest(p, result);

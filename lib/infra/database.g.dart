@@ -45,6 +45,40 @@ class $DocumentsTable extends Documents
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _authorMeta = const VerificationMeta('author');
+  @override
+  late final GeneratedColumn<String> author = GeneratedColumn<String>(
+    'author',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _synopsisMeta = const VerificationMeta(
+    'synopsis',
+  );
+  @override
+  late final GeneratedColumn<String> synopsis = GeneratedColumn<String>(
+    'synopsis',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _coverPathMeta = const VerificationMeta(
+    'coverPath',
+  );
+  @override
+  late final GeneratedColumn<String> coverPath = GeneratedColumn<String>(
+    'cover_path',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _lastPageMeta = const VerificationMeta(
     'lastPage',
   );
@@ -74,6 +108,9 @@ class $DocumentsTable extends Documents
     title,
     path,
     format,
+    author,
+    synopsis,
+    coverPath,
     lastPage,
     importedAt,
   ];
@@ -118,6 +155,24 @@ class $DocumentsTable extends Documents
     } else if (isInserting) {
       context.missing(_formatMeta);
     }
+    if (data.containsKey('author')) {
+      context.handle(
+        _authorMeta,
+        author.isAcceptableOrUnknown(data['author']!, _authorMeta),
+      );
+    }
+    if (data.containsKey('synopsis')) {
+      context.handle(
+        _synopsisMeta,
+        synopsis.isAcceptableOrUnknown(data['synopsis']!, _synopsisMeta),
+      );
+    }
+    if (data.containsKey('cover_path')) {
+      context.handle(
+        _coverPathMeta,
+        coverPath.isAcceptableOrUnknown(data['cover_path']!, _coverPathMeta),
+      );
+    }
     if (data.containsKey('last_page')) {
       context.handle(
         _lastPageMeta,
@@ -157,6 +212,18 @@ class $DocumentsTable extends Documents
         DriftSqlType.string,
         data['${effectivePrefix}format'],
       )!,
+      author: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}author'],
+      )!,
+      synopsis: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}synopsis'],
+      )!,
+      coverPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}cover_path'],
+      )!,
       lastPage: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}last_page'],
@@ -179,6 +246,9 @@ class Document extends DataClass implements Insertable<Document> {
   final String title;
   final String path;
   final String format;
+  final String author;
+  final String synopsis;
+  final String coverPath;
   final int lastPage;
   final DateTime importedAt;
   const Document({
@@ -186,6 +256,9 @@ class Document extends DataClass implements Insertable<Document> {
     required this.title,
     required this.path,
     required this.format,
+    required this.author,
+    required this.synopsis,
+    required this.coverPath,
     required this.lastPage,
     required this.importedAt,
   });
@@ -196,6 +269,9 @@ class Document extends DataClass implements Insertable<Document> {
     map['title'] = Variable<String>(title);
     map['path'] = Variable<String>(path);
     map['format'] = Variable<String>(format);
+    map['author'] = Variable<String>(author);
+    map['synopsis'] = Variable<String>(synopsis);
+    map['cover_path'] = Variable<String>(coverPath);
     map['last_page'] = Variable<int>(lastPage);
     map['imported_at'] = Variable<DateTime>(importedAt);
     return map;
@@ -207,6 +283,9 @@ class Document extends DataClass implements Insertable<Document> {
       title: Value(title),
       path: Value(path),
       format: Value(format),
+      author: Value(author),
+      synopsis: Value(synopsis),
+      coverPath: Value(coverPath),
       lastPage: Value(lastPage),
       importedAt: Value(importedAt),
     );
@@ -222,6 +301,9 @@ class Document extends DataClass implements Insertable<Document> {
       title: serializer.fromJson<String>(json['title']),
       path: serializer.fromJson<String>(json['path']),
       format: serializer.fromJson<String>(json['format']),
+      author: serializer.fromJson<String>(json['author']),
+      synopsis: serializer.fromJson<String>(json['synopsis']),
+      coverPath: serializer.fromJson<String>(json['coverPath']),
       lastPage: serializer.fromJson<int>(json['lastPage']),
       importedAt: serializer.fromJson<DateTime>(json['importedAt']),
     );
@@ -234,6 +316,9 @@ class Document extends DataClass implements Insertable<Document> {
       'title': serializer.toJson<String>(title),
       'path': serializer.toJson<String>(path),
       'format': serializer.toJson<String>(format),
+      'author': serializer.toJson<String>(author),
+      'synopsis': serializer.toJson<String>(synopsis),
+      'coverPath': serializer.toJson<String>(coverPath),
       'lastPage': serializer.toJson<int>(lastPage),
       'importedAt': serializer.toJson<DateTime>(importedAt),
     };
@@ -244,6 +329,9 @@ class Document extends DataClass implements Insertable<Document> {
     String? title,
     String? path,
     String? format,
+    String? author,
+    String? synopsis,
+    String? coverPath,
     int? lastPage,
     DateTime? importedAt,
   }) => Document(
@@ -251,6 +339,9 @@ class Document extends DataClass implements Insertable<Document> {
     title: title ?? this.title,
     path: path ?? this.path,
     format: format ?? this.format,
+    author: author ?? this.author,
+    synopsis: synopsis ?? this.synopsis,
+    coverPath: coverPath ?? this.coverPath,
     lastPage: lastPage ?? this.lastPage,
     importedAt: importedAt ?? this.importedAt,
   );
@@ -260,6 +351,9 @@ class Document extends DataClass implements Insertable<Document> {
       title: data.title.present ? data.title.value : this.title,
       path: data.path.present ? data.path.value : this.path,
       format: data.format.present ? data.format.value : this.format,
+      author: data.author.present ? data.author.value : this.author,
+      synopsis: data.synopsis.present ? data.synopsis.value : this.synopsis,
+      coverPath: data.coverPath.present ? data.coverPath.value : this.coverPath,
       lastPage: data.lastPage.present ? data.lastPage.value : this.lastPage,
       importedAt: data.importedAt.present
           ? data.importedAt.value
@@ -274,6 +368,9 @@ class Document extends DataClass implements Insertable<Document> {
           ..write('title: $title, ')
           ..write('path: $path, ')
           ..write('format: $format, ')
+          ..write('author: $author, ')
+          ..write('synopsis: $synopsis, ')
+          ..write('coverPath: $coverPath, ')
           ..write('lastPage: $lastPage, ')
           ..write('importedAt: $importedAt')
           ..write(')'))
@@ -281,8 +378,17 @@ class Document extends DataClass implements Insertable<Document> {
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, title, path, format, lastPage, importedAt);
+  int get hashCode => Object.hash(
+    id,
+    title,
+    path,
+    format,
+    author,
+    synopsis,
+    coverPath,
+    lastPage,
+    importedAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -291,6 +397,9 @@ class Document extends DataClass implements Insertable<Document> {
           other.title == this.title &&
           other.path == this.path &&
           other.format == this.format &&
+          other.author == this.author &&
+          other.synopsis == this.synopsis &&
+          other.coverPath == this.coverPath &&
           other.lastPage == this.lastPage &&
           other.importedAt == this.importedAt);
 }
@@ -300,6 +409,9 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
   final Value<String> title;
   final Value<String> path;
   final Value<String> format;
+  final Value<String> author;
+  final Value<String> synopsis;
+  final Value<String> coverPath;
   final Value<int> lastPage;
   final Value<DateTime> importedAt;
   final Value<int> rowid;
@@ -308,6 +420,9 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
     this.title = const Value.absent(),
     this.path = const Value.absent(),
     this.format = const Value.absent(),
+    this.author = const Value.absent(),
+    this.synopsis = const Value.absent(),
+    this.coverPath = const Value.absent(),
     this.lastPage = const Value.absent(),
     this.importedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -317,6 +432,9 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
     required String title,
     required String path,
     required String format,
+    this.author = const Value.absent(),
+    this.synopsis = const Value.absent(),
+    this.coverPath = const Value.absent(),
     this.lastPage = const Value.absent(),
     required DateTime importedAt,
     this.rowid = const Value.absent(),
@@ -330,6 +448,9 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
     Expression<String>? title,
     Expression<String>? path,
     Expression<String>? format,
+    Expression<String>? author,
+    Expression<String>? synopsis,
+    Expression<String>? coverPath,
     Expression<int>? lastPage,
     Expression<DateTime>? importedAt,
     Expression<int>? rowid,
@@ -339,6 +460,9 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
       if (title != null) 'title': title,
       if (path != null) 'path': path,
       if (format != null) 'format': format,
+      if (author != null) 'author': author,
+      if (synopsis != null) 'synopsis': synopsis,
+      if (coverPath != null) 'cover_path': coverPath,
       if (lastPage != null) 'last_page': lastPage,
       if (importedAt != null) 'imported_at': importedAt,
       if (rowid != null) 'rowid': rowid,
@@ -350,6 +474,9 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
     Value<String>? title,
     Value<String>? path,
     Value<String>? format,
+    Value<String>? author,
+    Value<String>? synopsis,
+    Value<String>? coverPath,
     Value<int>? lastPage,
     Value<DateTime>? importedAt,
     Value<int>? rowid,
@@ -359,6 +486,9 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
       title: title ?? this.title,
       path: path ?? this.path,
       format: format ?? this.format,
+      author: author ?? this.author,
+      synopsis: synopsis ?? this.synopsis,
+      coverPath: coverPath ?? this.coverPath,
       lastPage: lastPage ?? this.lastPage,
       importedAt: importedAt ?? this.importedAt,
       rowid: rowid ?? this.rowid,
@@ -380,6 +510,15 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
     if (format.present) {
       map['format'] = Variable<String>(format.value);
     }
+    if (author.present) {
+      map['author'] = Variable<String>(author.value);
+    }
+    if (synopsis.present) {
+      map['synopsis'] = Variable<String>(synopsis.value);
+    }
+    if (coverPath.present) {
+      map['cover_path'] = Variable<String>(coverPath.value);
+    }
     if (lastPage.present) {
       map['last_page'] = Variable<int>(lastPage.value);
     }
@@ -399,6 +538,9 @@ class DocumentsCompanion extends UpdateCompanion<Document> {
           ..write('title: $title, ')
           ..write('path: $path, ')
           ..write('format: $format, ')
+          ..write('author: $author, ')
+          ..write('synopsis: $synopsis, ')
+          ..write('coverPath: $coverPath, ')
           ..write('lastPage: $lastPage, ')
           ..write('importedAt: $importedAt, ')
           ..write('rowid: $rowid')
@@ -1993,6 +2135,9 @@ typedef $$DocumentsTableCreateCompanionBuilder =
       required String title,
       required String path,
       required String format,
+      Value<String> author,
+      Value<String> synopsis,
+      Value<String> coverPath,
       Value<int> lastPage,
       required DateTime importedAt,
       Value<int> rowid,
@@ -2003,6 +2148,9 @@ typedef $$DocumentsTableUpdateCompanionBuilder =
       Value<String> title,
       Value<String> path,
       Value<String> format,
+      Value<String> author,
+      Value<String> synopsis,
+      Value<String> coverPath,
       Value<int> lastPage,
       Value<DateTime> importedAt,
       Value<int> rowid,
@@ -2034,6 +2182,21 @@ class $$DocumentsTableFilterComposer
 
   ColumnFilters<String> get format => $composableBuilder(
     column: $table.format,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get author => $composableBuilder(
+    column: $table.author,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get synopsis => $composableBuilder(
+    column: $table.synopsis,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get coverPath => $composableBuilder(
+    column: $table.coverPath,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2077,6 +2240,21 @@ class $$DocumentsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get author => $composableBuilder(
+    column: $table.author,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get synopsis => $composableBuilder(
+    column: $table.synopsis,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get coverPath => $composableBuilder(
+    column: $table.coverPath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get lastPage => $composableBuilder(
     column: $table.lastPage,
     builder: (column) => ColumnOrderings(column),
@@ -2108,6 +2286,15 @@ class $$DocumentsTableAnnotationComposer
 
   GeneratedColumn<String> get format =>
       $composableBuilder(column: $table.format, builder: (column) => column);
+
+  GeneratedColumn<String> get author =>
+      $composableBuilder(column: $table.author, builder: (column) => column);
+
+  GeneratedColumn<String> get synopsis =>
+      $composableBuilder(column: $table.synopsis, builder: (column) => column);
+
+  GeneratedColumn<String> get coverPath =>
+      $composableBuilder(column: $table.coverPath, builder: (column) => column);
 
   GeneratedColumn<int> get lastPage =>
       $composableBuilder(column: $table.lastPage, builder: (column) => column);
@@ -2150,6 +2337,9 @@ class $$DocumentsTableTableManager
                 Value<String> title = const Value.absent(),
                 Value<String> path = const Value.absent(),
                 Value<String> format = const Value.absent(),
+                Value<String> author = const Value.absent(),
+                Value<String> synopsis = const Value.absent(),
+                Value<String> coverPath = const Value.absent(),
                 Value<int> lastPage = const Value.absent(),
                 Value<DateTime> importedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -2158,6 +2348,9 @@ class $$DocumentsTableTableManager
                 title: title,
                 path: path,
                 format: format,
+                author: author,
+                synopsis: synopsis,
+                coverPath: coverPath,
                 lastPage: lastPage,
                 importedAt: importedAt,
                 rowid: rowid,
@@ -2168,6 +2361,9 @@ class $$DocumentsTableTableManager
                 required String title,
                 required String path,
                 required String format,
+                Value<String> author = const Value.absent(),
+                Value<String> synopsis = const Value.absent(),
+                Value<String> coverPath = const Value.absent(),
                 Value<int> lastPage = const Value.absent(),
                 required DateTime importedAt,
                 Value<int> rowid = const Value.absent(),
@@ -2176,6 +2372,9 @@ class $$DocumentsTableTableManager
                 title: title,
                 path: path,
                 format: format,
+                author: author,
+                synopsis: synopsis,
+                coverPath: coverPath,
                 lastPage: lastPage,
                 importedAt: importedAt,
                 rowid: rowid,

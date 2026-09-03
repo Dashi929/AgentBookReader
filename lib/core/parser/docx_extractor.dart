@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:xml/xml.dart';
 
+import '../model/book_metadata.dart';
 import '../model/char_range.dart';
 import '../model/extracted_image.dart';
 
@@ -211,5 +212,58 @@ class DocxExtractor {
     } catch (_) {
       return {};
     }
+  }
+
+  /// 提取元数据：docProps/core.xml 的 dc:creator / dc:description；
+  /// 封面取 word/media 下第一个图片（docx 无"官方封面"概念，近似处理）。
+  static BookMetadata extractMetadata(List<int> bytes) {
+    final archive = ZipDecoder().decodeBytes(bytes);
+    var author = '';
+    var synopsis = '';
+    try {
+      final core = _findEntry(archive, 'docProps/core.xml');
+      if (core != null) {
+        final doc =
+            XmlDocument.parse(utf8.decode(core.content, allowMalformed: true));
+        author = doc
+              .findAllElements('creator')
+              .firstOrNull
+              ?.innerText
+              .trim() ??
+          doc
+              .findAllElements('dc:creator')
+              .firstOrNull
+              ?.innerText
+              .trim() ??
+          '';
+        synopsis = doc
+                .findAllElements('description')
+                .firstOrNull
+                ?.innerText
+                .trim() ??
+            doc
+                .findAllElements('dc:description')
+                .firstOrNull
+                ?.innerText
+                .trim() ??
+            '';
+      }
+    } catch (_) {}
+    Uint8List? coverBytes;
+    String coverExt = '';
+    const imgExts = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'};
+    for (final f in archive.files) {
+      final name = f.name.replaceAll('\\', '/').toLowerCase();
+      if (name.startsWith('word/media/')) {
+        final ext = name.split('.').last;
+        if (imgExts.contains(ext)) {
+          coverBytes = Uint8List.fromList(f.content);
+          coverExt = ext;
+          break;
+        }
+      }
+    }
+    return BookMetadata(
+        author: author, synopsis: synopsis, coverBytes: coverBytes, coverExt: coverExt);
   }
 }

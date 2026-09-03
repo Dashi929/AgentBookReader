@@ -116,4 +116,36 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get originalFileUpdated => '原文件已备份并更新';
+
+  @override
+  String get bookDetail => '图书详情';
+
+  @override
+  String get author => '作者';
+
+  @override
+  String get synopsis => '简介';
+
+  @override
+  String get preview => '预览';
+
+  @override
+  String get startReading => '开始阅读';
+
+  @override
+  String get aiComplete => 'AI 补全信息';
+
+  @override
+  String get unknownAuthor => '未知作者';
+
+  @override
+  String get aiCompleteDone => '信息已补全';
+
+  @override
+  String get noSynopsis => '暂无简介，可点击\"AI 补全信息\"生成';
+
+  @override
+  String continueReading(String page) {
+    return '继续阅读：$page';
+  }
 }

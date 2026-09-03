@@ -118,4 +118,36 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get originalFileUpdated => 'Original file backed up and updated';
+
+  @override
+  String get bookDetail => 'Book Details';
+
+  @override
+  String get author => 'Author';
+
+  @override
+  String get synopsis => 'Synopsis';
+
+  @override
+  String get preview => 'Preview';
+
+  @override
+  String get startReading => 'Start Reading';
+
+  @override
+  String get aiComplete => 'Complete with AI';
+
+  @override
+  String get unknownAuthor => 'Unknown author';
+
+  @override
+  String get aiCompleteDone => 'Metadata updated';
+
+  @override
+  String get noSynopsis => 'No synopsis yet — use \"Complete with AI\"';
+
+  @override
+  String continueReading(String page) {
+    return 'Continue reading: $page';
+  }
 }

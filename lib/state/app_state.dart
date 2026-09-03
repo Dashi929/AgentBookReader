@@ -31,6 +31,10 @@ class PrefsService {
   /// 翻译目标语言（zh/en/ja/ko/fr/de/es/ru）
   String loadTargetLang() => sp.getString('targetLang') ?? 'zh';
   void saveTargetLang(String code) => sp.setString('targetLang', code);
+
+  /// 书架视图：true=网格（封面块状），false=列表
+  bool loadLibraryView() => sp.getBool('libraryGridView') ?? false;
+  void saveLibraryView(bool grid) => sp.setBool('libraryGridView', grid);
 }
 
 /// 支持的翻译目标语言（code, 显示名）。
@@ -55,13 +59,19 @@ class BookEntry {
     required this.title,
     required this.path,
     required this.extension,
+    this.author = '',
+    this.synopsis = '',
+    this.coverPath = '',
     this.lastPage = 0,
   });
 
   final String id;
   final String title;
   final String path;
-  final String extension; // txt | md | json | docx
+  final String extension; // txt | md | json | docx | epub | pdf
+  String author; // 空表示未知，可由 AI 补全
+  String synopsis;
+  String coverPath; // 封面图片路径；空表示用生成式占位封面
   int lastPage;
 }
 
@@ -111,6 +121,9 @@ class LibraryNotifier extends StateNotifier<List<BookEntry>> {
               title: r.title,
               path: r.path,
               extension: r.format,
+              author: r.author,
+              synopsis: r.synopsis,
+              coverPath: r.coverPath,
               lastPage: r.lastPage,
             ))
         .toList();
@@ -122,6 +135,9 @@ class LibraryNotifier extends StateNotifier<List<BookEntry>> {
           title: entry.title,
           path: entry.path,
           format: entry.extension,
+          author: Value(entry.author),
+          synopsis: Value(entry.synopsis),
+          coverPath: Value(entry.coverPath),
           lastPage: Value(entry.lastPage),
           importedAt: DateTime.now(),
         ));
@@ -139,6 +155,28 @@ class LibraryNotifier extends StateNotifier<List<BookEntry>> {
     state = [
       for (final e in state)
         if (e.id == id) e..lastPage = page else e
+    ];
+  }
+
+  /// 元数据更新（作者/简介/封面），任一传 null 表示不改。
+  Future<void> updateMeta(String id,
+      {String? author, String? synopsis, String? coverPath}) async {
+    await (_db.update(_db.documents)..where((u) => u.id.equals(id))).write(
+        DocumentsCompanion(
+            author: author == null ? const Value.absent() : Value(author),
+            synopsis:
+                synopsis == null ? const Value.absent() : Value(synopsis),
+            coverPath:
+                coverPath == null ? const Value.absent() : Value(coverPath)));
+    state = [
+      for (final e in state)
+        if (e.id == id)
+          e
+            ..author = author ?? e.author
+            ..synopsis = synopsis ?? e.synopsis
+            ..coverPath = coverPath ?? e.coverPath
+        else
+          e
     ];
   }
 

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:xml/xml.dart';
 
+import '../model/book_metadata.dart';
 import '../model/extracted_image.dart';
 
 /// .epub 提取：ZIP → META-INF/container.xml → OPF → spine 顺序 XHTML
@@ -177,5 +178,116 @@ class EpubExtractor {
       }
     }
     return buf.toString();
+  }
+
+  /// 提取元数据：作者（dc:creator）、简介（dc:description，剥标签）、
+  /// 封面（cover-image 属性 → meta name=cover → 首个图片项）。
+  static BookMetadata extractMetadata(List<int> bytes) {
+    final archive = ZipDecoder().decodeBytes(bytes);
+    final opfPath = _opfPath(archive);
+    if (opfPath == null) return const BookMetadata();
+    try {
+      final opfFile = _find(archive, opfPath);
+      if (opfFile == null) return const BookMetadata();
+      final doc = XmlDocument.parse(
+          utf8.decode(opfFile.content, allowMalformed: true));
+      final author =
+          doc
+              .findAllElements('creator')
+              .firstOrNull
+              ?.innerText
+              .trim() ??
+          doc
+              .findAllElements('dc:creator')
+              .firstOrNull
+              ?.innerText
+              .trim() ??
+          '';
+      final synopsis = doc
+              .findAllElements('description')
+              .firstOrNull
+              ?.innerText
+              .replaceAll(RegExp(r'<[^>]*>'), '')
+              .trim() ??
+          doc
+              .findAllElements('dc:description')
+              .firstOrNull
+              ?.innerText
+              .replaceAll(RegExp(r'<[^>]*>'), '')
+              .trim() ??
+          '';
+      final opfDir = opfPath.contains('/')
+          ? opfPath.substring(0, opfPath.lastIndexOf('/') + 1)
+          : '';
+
+      // href → 内容
+      Uint8List? coverBytes;
+      String coverExt = '';
+      Uint8List? readHref(String href) {
+        if (href.isEmpty) return null;
+        final f = _find(archive, _normalizePath('$opfDir$href'));
+        if (f == null) return null;
+        return Uint8List.fromList(f.content);
+      }
+
+      // 1) manifest 中 properties 含 cover-image 的项
+      for (final item in doc.findAllElements('item')) {
+        final props = item.getAttribute('properties') ?? '';
+        if (props.contains('cover-image')) {
+          final b = readHref(item.getAttribute('href') ?? '');
+          if (b != null && b.isNotEmpty) {
+            coverBytes = b;
+            coverExt = (item.getAttribute('href') ?? '')
+                .split('.')
+                .last
+                .toLowerCase();
+          }
+          break;
+        }
+      }
+      // 2) <meta name="cover" content="<id>"> → 对应 manifest 项
+      if (coverBytes == null) {
+        for (final meta in doc.findAllElements('meta')) {
+          if ((meta.getAttribute('name') ?? '') == 'cover') {
+            final id = meta.getAttribute('content') ?? '';
+            for (final item in doc.findAllElements('item')) {
+              if (item.getAttribute('id') == id) {
+                final b = readHref(item.getAttribute('href') ?? '');
+                if (b != null && b.isNotEmpty) {
+                  coverBytes = b;
+                  coverExt = (item.getAttribute('href') ?? '')
+                      .split('.')
+                      .last
+                      .toLowerCase();
+                }
+                break;
+              }
+            }
+            break;
+          }
+        }
+      }
+      // 3) 兜底：manifest 中第一个图片项
+      if (coverBytes == null) {
+        for (final item in doc.findAllElements('item')) {
+          final mt = item.getAttribute('media-type') ?? '';
+          if (mt.startsWith('image/')) {
+            final b = readHref(item.getAttribute('href') ?? '');
+            if (b != null && b.isNotEmpty) {
+              coverBytes = b;
+              coverExt = (item.getAttribute('href') ?? '')
+                  .split('.')
+                  .last
+                  .toLowerCase();
+              break;
+            }
+          }
+        }
+      }
+      return BookMetadata(
+          author: author, synopsis: synopsis, coverBytes: coverBytes, coverExt: coverExt);
+    } catch (_) {
+      return const BookMetadata();
+    }
   }
 }

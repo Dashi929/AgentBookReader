@@ -6,22 +6,55 @@
   "reader": "Reader",
   "importFiles": "Import files",
   "importFailed": "Import failed: {reason}",
-  "@importFailed": { "placeholders": { "reason": { "type": "String" } } },
+  "@importFailed": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
   "agentPanel": "Agent",
   "agentAsk": "Ask about this document…",
   "agentWorkspaceSelect": "Select documents to process (multi-select)",
   "agentWorkspaceAsk": "Ask the agent to work on the selected documents…",
   "translate": "Translate",
   "translateJobRunning": "Translating {done}/{total}…",
-  "@translateJobRunning": { "placeholders": { "done": { "type": "int" }, "total": { "type": "int" } } },
+  "@translateJobRunning": {
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
   "originalText": "Original",
   "translatedText": "Translation",
   "section": "Section {n}",
-  "@section": { "placeholders": { "n": { "type": "int" } } },
+  "@section": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
   "page": "Page {n}",
-  "@page": { "placeholders": { "n": { "type": "int" } } },
+  "@page": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
   "words": "{count} words",
-  "@words": { "placeholders": { "count": { "type": "int" } } },
+  "@words": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "confirm": "Confirm",
   "cancel": "Cancel",
   "llmBaseUrl": "Base URL",
@@ -32,10 +65,33 @@
   "apply": "Apply",
   "editSection": "Edit section",
   "unTranslated": "[This section is not translated yet] {title}",
-  "@unTranslated": { "placeholders": { "title": { "type": "String" } } },
+  "@unTranslated": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
   "annotations": "Annotations",
   "export": "Export",
   "chapters": "Chapters",
   "writeBack": "Write to original file (.bak)",
-  "originalFileUpdated": "Original file backed up and updated"
+  "originalFileUpdated": "Original file backed up and updated",
+  "bookDetail": "Book Details",
+  "author": "Author",
+  "synopsis": "Synopsis",
+  "preview": "Preview",
+  "startReading": "Start Reading",
+  "aiComplete": "Complete with AI",
+  "unknownAuthor": "Unknown author",
+  "aiCompleteDone": "Metadata updated",
+  "noSynopsis": "No synopsis yet — use \"Complete with AI\"",
+  "continueReading": "Continue reading: {page}",
+  "@continueReading": {
+    "placeholders": {
+      "page": {
+        "type": "String"
+      }
+    }
+  }
 }

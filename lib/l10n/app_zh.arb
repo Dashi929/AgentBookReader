@@ -15,9 +15,21 @@
   "originalText": "原文",
   "translatedText": "译文",
   "section": "第{n}节",
-  "@section": { "placeholders": { "n": { "type": "int" } } },
+  "@section": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
   "page": "第 {n} 页",
-  "@page": { "placeholders": { "n": { "type": "int" } } },
+  "@page": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
   "words": "{count} 字",
   "confirm": "确认",
   "cancel": "取消",
@@ -29,10 +41,33 @@
   "apply": "确认应用",
   "editSection": "编辑本节",
   "unTranslated": "【本节尚未翻译】{title}",
-  "@unTranslated": { "placeholders": { "title": { "type": "String" } } },
+  "@unTranslated": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
   "annotations": "批注",
   "export": "导出",
   "writeBack": "写入原文件(.bak)",
   "chapters": "章节",
-  "originalFileUpdated": "原文件已备份并更新"
+  "originalFileUpdated": "原文件已备份并更新",
+  "bookDetail": "图书详情",
+  "author": "作者",
+  "synopsis": "简介",
+  "preview": "预览",
+  "startReading": "开始阅读",
+  "aiComplete": "AI 补全信息",
+  "unknownAuthor": "未知作者",
+  "aiCompleteDone": "信息已补全",
+  "noSynopsis": "暂无简介，可点击\"AI 补全信息\"生成",
+  "continueReading": "继续阅读：{page}",
+  "@continueReading": {
+    "placeholders": {
+      "page": {
+        "type": "String"
+      }
+    }
+  }
 }

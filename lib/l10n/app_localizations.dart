@@ -289,6 +289,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Original file backed up and updated'**
   String get originalFileUpdated;
+
+  /// No description provided for @bookDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Book Details'**
+  String get bookDetail;
+
+  /// No description provided for @author.
+  ///
+  /// In en, this message translates to:
+  /// **'Author'**
+  String get author;
+
+  /// No description provided for @synopsis.
+  ///
+  /// In en, this message translates to:
+  /// **'Synopsis'**
+  String get synopsis;
+
+  /// No description provided for @preview.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview'**
+  String get preview;
+
+  /// No description provided for @startReading.
+  ///
+  /// In en, this message translates to:
+  /// **'Start Reading'**
+  String get startReading;
+
+  /// No description provided for @aiComplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Complete with AI'**
+  String get aiComplete;
+
+  /// No description provided for @unknownAuthor.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown author'**
+  String get unknownAuthor;
+
+  /// No description provided for @aiCompleteDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Metadata updated'**
+  String get aiCompleteDone;
+
+  /// No description provided for @noSynopsis.
+  ///
+  /// In en, this message translates to:
+  /// **'No synopsis yet — use \"Complete with AI\"'**
+  String get noSynopsis;
+
+  /// No description provided for @continueReading.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue reading: {page}'**
+  String continueReading(String page);
 }
 
 class _AppLocalizationsDelegate
