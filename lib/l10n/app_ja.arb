@@ -11,6 +11,7 @@
   "agentWorkspaceSelect": "処理するドキュメントを選択（複数可）",
   "agentWorkspaceAsk": "選択したドキュメントを Agent に処理させる…",
   "translate": "翻訳",
+  "translateTo": "翻訳先…",
   "translateJobRunning": "翻訳中 {done}/{total}…",
   "originalText": "原文",
   "translatedText": "訳文",

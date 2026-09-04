@@ -1,0 +1,36 @@
+AgentBookReader is a modern e-book reader with a built-in AI agent. What you read, how you read it, and what you ask about it — all up to you.
+
+🤖 AI Reading Assistant
+• Chat with the current book: ask questions, get outlines, search the text
+• Add annotations in one tap; AI rewrite proposals apply only after you confirm
+• Works with any OpenAI-compatible API (DeepSeek, Qwen, etc.); keys are kept in secure system storage
+• A workspace for managing multiple documents and exporting full-book translations
+
+🌐 Multi-Engine Translation
+• Full-page and block translation into Simplified Chinese, English, Japanese, Korean, French, German, Spanish
+• Free built-in engine (MyMemory) works without registration; plug in an LLM for higher quality
+• Translate a whole book chapter by chapter and export as Markdown
+
+📖 9 Popular Formats
+• Text: TXT, Markdown, JSON, DOCX, EPUB (GBK and other encodings auto-detected; embedded images supported)
+• Original rendering: PDF, PPT, Excel, CBZ comics (pinch to zoom, continuous scroll, chapter navigation)
+
+🎨 Comfortable Reading
+• 4 themes: Light / Sepia / Dark / Black
+• Font size, line height, paragraph spacing, margins and brightness
+• Progress memory, keep-awake, immersive mode
+• Long-press to select text: copy or translate
+
+📚 A Helpful Library
+• Grid and list views; a detail page with synopsis, chapters and progress
+• Metadata and covers extracted on import, with AI-assisted completion
+• In-place editing with write-back for TXT / Markdown / JSON
+
+🔒 Privacy First
+• Books and reading data stay on your device — no server upload
+• No ads, no in-app purchases, no tracking
+• Online translation sends only the selected text to the service you choose
+
+🗣️ UI languages: 简体中文, 繁體中文, English, 日本語
+
+Novels, notes, documents or comics — let AI help you read every book deeper.

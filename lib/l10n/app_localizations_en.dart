@@ -47,6 +47,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translate => 'Translate';
 
   @override
+  String get translateTo => 'Translate to…';
+
+  @override
   String translateJobRunning(int done, int total) {
     return 'Translating $done/$total…';
   }

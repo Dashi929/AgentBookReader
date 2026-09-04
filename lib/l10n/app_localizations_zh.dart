@@ -45,6 +45,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translate => '翻译';
 
   @override
+  String get translateTo => '翻译到…';
+
+  @override
   String translateJobRunning(int done, int total) {
     return '翻译中 $done/$total…';
   }
@@ -288,6 +291,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get translate => '翻譯';
+
+  @override
+  String get translateTo => '翻譯到…';
 
   @override
   String translateJobRunning(int done, int total) {

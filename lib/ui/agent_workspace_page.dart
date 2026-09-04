@@ -308,7 +308,7 @@ class _AgentWorkspacePageState extends ConsumerState<AgentWorkspacePage> {
     final langCode = await showDialog<String>(
       context: context,
       builder: (context) => SimpleDialog(
-        title: const Text('整篇翻译到…'),
+        title: Text(s.translateTo),
         children: [
           for (final (code, name) in targetLanguages)
             SimpleDialogOption(

@@ -11,6 +11,7 @@
   "agentWorkspaceSelect": "选择要处理的文档（可多选）",
   "agentWorkspaceAsk": "让 Agent 处理选中的文档…",
   "translate": "翻译",
+  "translateTo": "翻译到…",
   "translateJobRunning": "翻译中 {done}/{total}…",
   "originalText": "原文",
   "translatedText": "译文",

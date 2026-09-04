@@ -18,6 +18,7 @@
   "agentWorkspaceSelect": "Select documents to process (multi-select)",
   "agentWorkspaceAsk": "Ask the agent to work on the selected documents…",
   "translate": "Translate",
+  "translateTo": "Translate to…",
   "translateJobRunning": "Translating {done}/{total}…",
   "@translateJobRunning": {
     "placeholders": {

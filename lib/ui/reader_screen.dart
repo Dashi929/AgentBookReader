@@ -162,6 +162,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   int? _selectedParagraph; // 选块模式下被选中的段落
   bool _translating = false;
 
+  /// 宽屏设备（平板/桌面）不锁定方向，阅读器随设备旋转重新分页。
+  bool _wideScreen = false;
+
   String get _docId => widget.entryId ?? widget.title;
 
   /// 写回原文件仅对纯文本格式开放（docx/pdf 不回写）。
@@ -199,6 +202,17 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     _applyOrientation();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // initState 阶段不能依赖 MediaQuery，这里补算宽屏标记并重应用方向
+    final wide = MediaQuery.of(context).size.shortestSide >= 600;
+    if (wide != _wideScreen) {
+      _wideScreen = wide;
+      _applyOrientation();
+    }
+  }
+
   /// 应用常亮/沉浸（进入时按偏好，弹窗切换时实时更新）。
   void _applyComfortSettings() {
     final st = ref.read(readerSettingsProvider);
@@ -215,7 +229,16 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }
 
   /// ppt/xlsx 单页模式默认横屏；连续模式竖屏（纵向滚动）。
+  /// 宽屏设备（平板）不锁方向：阅读器支持横竖重排，交给用户旋转。
   void _applyOrientation() {
+    if (_wideScreen) {
+      SystemChrome.setPreferredOrientations(const [
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+      return;
+    }
     final landscape =
         (widget.format == 'pptx' || widget.format == 'xlsx') && !_continuous;
     SystemChrome.setPreferredOrientations(landscape
@@ -624,8 +647,15 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     _pageController.dispose();
     _continuousController.dispose();
     _pdfDoc?.dispose();
-    // 恢复竖屏（横屏仅 ppt/xlsx 单页模式期间生效）与系统 UI
-    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    // 恢复方向与系统 UI：手机回竖屏（横屏仅 ppt/xlsx 单页模式期间生效）；
+    // 宽屏设备保持不锁方向，随用户旋转
+    SystemChrome.setPreferredOrientations(_wideScreen
+        ? const [
+            DeviceOrientation.portraitUp,
+            DeviceOrientation.landscapeLeft,
+            DeviceOrientation.landscapeRight,
+          ]
+        : const [DeviceOrientation.portraitUp]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     WakelockPlus.disable();
     super.dispose();
@@ -1365,7 +1395,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     final langCode = await showDialog<String>(
       context: context,
       builder: (context) => SimpleDialog(
-        title: const Text('翻译到…'),
+        title: Text(s.translateTo),
         children: [
           for (final (code, name) in targetLanguages)
             SimpleDialogOption(
@@ -1397,7 +1427,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     final choice = await showDialog<String>(
       context: context,
       builder: (context) => SimpleDialog(
-        title: Text('$s.translate · $langName'),
+        title: Text('${s.translate} · $langName'),
         children: [
           SimpleDialogOption(
             onPressed: () => Navigator.pop(context, 'page'),

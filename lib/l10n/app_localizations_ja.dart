@@ -45,6 +45,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translate => '翻訳';
 
   @override
+  String get translateTo => '翻訳先…';
+
+  @override
   String translateJobRunning(int done, int total) {
     return '翻訳中 $done/$total…';
   }

@@ -167,6 +167,12 @@ abstract class AppLocalizations {
   /// **'Translate'**
   String get translate;
 
+  /// No description provided for @translateTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Translate to…'**
+  String get translateTo;
+
   /// No description provided for @translateJobRunning.
   ///
   /// In en, this message translates to:

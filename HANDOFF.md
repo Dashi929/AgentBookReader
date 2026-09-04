@@ -254,6 +254,21 @@ flutter gen-l10n                  # ARB 改后必须跑（或 flutter run 自动
 - 商店列表用 512 图标：`assets/icon/play_store_512.png`（全出血无透明，直接传 Console）
 - 自适应 xml 自带 16% inset（flutter_launcher_icons 默认），前景图自身已留安全区边距，勿再调小
 
+### 发版约定（2026-09-04，用户明确要求）
+
+- **GitHub Release 只发 exe + apk**（apk：`flutter build apk --release`；exe：杀运行中 exe 后 `flutter build windows --release`，把 `build\windows\x64\runner\Release\` 整目录压 zip）
+- **Play 提审 AAB 只本地产出**（`flutter build appbundle --release`），不经 GitHub 发布
+- 版本号跟 v1.0.x 标签走：改 pubspec version → 打 tag → 发 Release（v1.0.3 起以此为准）
+
+### 商店截图（2026-09-04 产出）
+
+- 成品在 `store/screenshots/{phone,tablet_7,tablet_10}/`（phone 8 张、tablet_7 4 张、tablet_10 4 张，全部 16:9 或 9:16，PNG <8MB，已过规格校验）
+- 商店宣传大图（Feature Graphic）：`store/feature_graphic.png`（1024×500 PNG），生成脚本 `tool/gen_feature_graphic.py`（复用图标脚本的 logo 绘制，文案在脚本顶部常量里改）
+- 商店文案：`store/listing/{zh,en}/short_description.txt + full_description.txt`（zh 简短 52/80、完整 795/4000；en 78/80、1813/4000，均含emoji分节；改完用 len() 校验字符数）
+- 专用 AVD：`Phone169`（1080×1920@480）、`Tab7`（1920×1080@240）、`Tab10`（1920×1080@160），系统镜像 android-35 google_apis x86_64
+- 再生成要点：装 release apk → `cmd locale set-app-locales com.neetstudio.agentbookreader --locales zh-CN` → 系统演示模式（sysui_demo_allowed + systemui.demo broadcast）净状态栏 → 样书在 `build/store_books/`（push 到 /sdcard/Download 后走应用内导入；Recent 索引会滞后，用选择器侧边栏 Downloads 目录兜底）
+- 坑：阅读器锁竖屏（reader_screen.dart:628），横屏平板上开过阅读器后整个应用被信箱化——force-stop 重开即恢复；平板的阅读类截图要用 `settings put system user_rotation 1` 把设备转竖屏再截
+
 ## 八、Android 模拟器功能实测（2026-09-02，AVD AgentReader / API 35）
 
 - 通过：导入 txt（FAB→SAF→Downloads）、分页渲染、右侧点击翻页、进度记忆（强杀重启回第 2 页）、主题三档循环、字号调整与重排、Agent 对话（真实 LLM）、add_annotation 工具+批注列表、整页翻译（MyMemory→英文结果面板）、编辑本节保存、工作台（免预选引导→list_documents→勾选后 get_outline）、改写提案弹窗+Reject 原文不变
