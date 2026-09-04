@@ -1,4 +1,4 @@
-package com.openleaf.agent_book_reader
+package com.neetstudio.agentbookreader
 
 import io.flutter.embedding.android.FlutterActivity
 

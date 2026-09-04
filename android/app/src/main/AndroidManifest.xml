@@ -4,7 +4,7 @@
          release APKs). -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="agent_book_reader"
+        android:label="AgentBookReader"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

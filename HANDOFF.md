@@ -5,7 +5,7 @@
 ## 一、项目概况
 
 - **是什么**：跨平台电子书阅读器（Android/iOS/Windows/Linux），内置 AI Agent（对话问答、批注、改写提案）与翻译（整页/选块，多提供方）
-- **路径**：`D:\Projects\AgentBookReader`（包名 `agent_book_reader`，org `com.openleaf`）
+- **路径**：`D:\Projects\AgentBookReader`（Dart 包名 `agent_book_reader`；Android applicationId `com.neetstudio.agentbookreader`，2026-09-03 起废弃旧 org `com.openleaf`）
 - **技术栈**：Flutter 3.47.2 / Dart 3.13.2 · Riverpod · drift(SQLite) · http · file_selector · enough_convert · flutter_secure_storage · pdfrx 2.5.0(PDF)
 - **规模**：40 个 dart 文件 / ~7000 行 / 34 个自动化测试
 - **Git**：已提交并推送到 GitHub `Dashi929/AgentBookReader`（main；用户规矩：他说"提交/推送"才能动）
@@ -228,16 +228,31 @@ flutter analyze
 flutter test
 flutter build windows --release --no-tree-shake-icons   # 产物 Release\agent_book_reader.exe
 flutter build apk --release --no-tree-shake-icons      # 产物 flutter-apk\app-release.apk（debug 签名，测试用）
+flutter build appbundle --release                     # Google Play 提审包：build\app\outputs\bundle\release\app-release.aab
 # 安卓模拟器（AVD: AgentReader）
 C:\Users\11020\AppData\Local\Android\Sdk\emulator\emulator.exe -avd AgentReader
 adb install -r build\app\outputs\flutter-apk\app-release.apk
-adb shell am start -n com.openleaf.agent_book_reader/.MainActivity
-adb shell dumpsys package com.openleaf.agent_book_reader | findstr INTERNET   # 验证联网权限
+adb shell am start -n com.neetstudio.agentbookreader/.MainActivity
+adb shell dumpsys package com.neetstudio.agentbookreader | findstr INTERNET   # 验证联网权限
 flutter run -d windows            # 调试
 flutter run -d chrome             # Web 调试（需 flutter create . --platforms web，已配）
 dart run build_runner build --delete-conflicting-outputs   # drift 改表后必须跑
 flutter gen-l10n                  # ARB 改后必须跑（或 flutter run 自动）
 ```
+
+### Play 上架签名（2026-09-03 配置）
+
+- **上传密钥**：`android/app/upload-keystore.jks`（PKCS12，RSA 4096，alias `upload`，有效期至 2054-01）
+- **密码**：在 `android/key.properties`（storePassword 与 keyPassword 相同）——**此文件与 jks 均被 gitignore，务必另外备份**（首次发布采用 Play App Signing 后，该密钥成为上传密钥，丢失只能重置）
+- 证书 SHA256：`3A:B9:AD:81:D9:1F:5F:8E:FE:ED:9D:93:AB:1D:C0:F9:7D:72:05:E7:3C:EC:D4:8B:24:7C:51:E3:34:70:08:06`
+- release 签名走 `android/app/build.gradle.kts` 里的 key.properties 读取；文件缺失时回退 debug 签名（仅本地测试可跑 `flutter run --release`）
+
+### 应用图标（2026-09-04 配置，仅 Android）
+
+- 源文件在 `assets/icon/`（4 张：传统图标/自适应前景/自适应背景/Play 商店 512）
+- 改图标两步：`python tool/gen_app_icon.py`（需 Pillow）→ `dart run flutter_launcher_icons`，然后重打 AAB
+- 商店列表用 512 图标：`assets/icon/play_store_512.png`（全出血无透明，直接传 Console）
+- 自适应 xml 自带 16% inset（flutter_launcher_icons 默认），前景图自身已留安全区边距，勿再调小
 
 ## 八、Android 模拟器功能实测（2026-09-02，AVD AgentReader / API 35）
 
